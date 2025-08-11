@@ -1,0 +1,57 @@
+// Core AI interfaces and types
+export interface AIModel {
+  id: string;
+  name: string;
+  provider: 'openai' | 'anthropic' | 'google' | 'groq' | 'ollama' | 'xai';
+  maxTokens?: number;
+  temperature?: number;
+  imageSupport?: boolean;
+  reasoningModel?: boolean;
+  supportsTools?: boolean;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface AIResponse {
+  content: string;
+  model: string;
+  rawResponse?: any;
+  reasoning?: any;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+}
+
+export interface ModelGroup {
+  provider: string;
+  enabled: boolean;
+  models: AIModel[];
+}
+
+export interface ParsedResponse {
+  reasoning?: string;
+  finalAnswer: string;
+  hasReasoning: boolean;
+}
+
+// Provider configurations
+export interface ProviderConfig {
+  [key: string]: any;
+}
+
+// Tool calling interfaces
+export interface ToolCallOptions {
+  model: string;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  maxTokens?: number;
+  temperature?: number;
+  webSearchEnabled?: boolean;
+  customInstructions?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+} 
