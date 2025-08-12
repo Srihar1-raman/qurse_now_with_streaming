@@ -40,14 +40,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         temperature: 0.7,
         supportsTools: true
       },
-      {
-        id: 'mistral-saba-24b',
-        name: 'Mistral Saba 24B',
-        provider: 'groq',
-        maxTokens: 8192,
-        temperature: 0.7,
-        supportsTools: true
-      },
+
       {
         id: 'llama-3.3-70b-versatile',
         name: 'Llama 3.3 70B Versatile',

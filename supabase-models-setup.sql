@@ -17,7 +17,7 @@ INSERT INTO ai_models (name, provider, model_id, display_name, description, is_a
 ('gemma2-9b-it', 'groq', 'gemma2-9b-it', 'Gemma 2 9B IT', 'Google''s Gemma 2 9B instruction-tuned model', true, true, false, false, 8192, 0.0003),
 ('llama3-70b-8192', 'groq', 'llama3-70b-8192', 'Llama 3 70B 8K', 'Meta''s Llama 3 70B model with 8K context', true, true, false, false, 8192, 0.0007),
 ('kimi-k2-instruct', 'groq', 'moonshotai/kimi-k2-instruct', 'Kimi K2 Instruct', 'Moonshot AI''s Kimi K2 instruction-tuned model', true, true, false, false, 32768, 0.0006),
-('mistral-saba-24b', 'groq', 'mistral-saba-24b', 'Mistral Saba 24B', 'Mistral AI''s Saba 24B parameter model', true, true, false, false, 32768, 0.0004),
+
 ('llama-3.3-70b-versatile', 'groq', 'llama-3.3-70b-versatile', 'Llama 3.3 70B Versatile', 'Meta''s latest Llama 3.3 70B versatile model', true, true, false, false, 32768, 0.0008),
 ('llama-4-scout-17b', 'groq', 'meta-llama/llama-4-scout-17b-16e-instruct', 'Llama 4 Scout 17B', 'Meta''s Llama 4 Scout 17B instruction model', true, true, false, false, 32768, 0.0004)
 
