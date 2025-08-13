@@ -26,7 +26,6 @@ export default function Home() {
   // Web search options
   const webSearchOptions = [
     { name: 'Chat', enabled: false },
-    { name: 'Tavily', enabled: false },
     { name: 'Exa', enabled: true }
   ];
 
@@ -486,11 +485,6 @@ export default function Home() {
                           {option.name === 'Exa' && (
                             <span className="image-badge">
                               <Image src={getIconSrc("exa", selectedWebSearchOption === option.name)} alt="Exa" width={12} height={12} className="badge-icon" />
-                            </span>
-                          )}
-                          {option.name === 'Tavily' && option.enabled && (
-                            <span className="image-badge">
-                              <Image src={getIconSrc("internet", selectedWebSearchOption === option.name)} alt="Tavily" width={12} height={12} className="badge-icon" />
                             </span>
                           )}
                         </div>
