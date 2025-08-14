@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { useTheme } from '@/lib/ThemeContext';
 import { useAuth } from '@/components/SessionProvider';
 import HistorySidebar from '@/components/HistorySidebar';
 
 export default function InfoPage() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState('about');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const { resolvedTheme, mounted } = useTheme();
@@ -30,7 +31,7 @@ export default function InfoPage() {
   ];
 
   const handleNewChatClick = () => {
-    window.location.href = '/';
+    router.push('/');
   };
 
   const handleHistoryClick = () => {

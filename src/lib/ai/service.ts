@@ -1,6 +1,6 @@
 import { generateText, streamText, generateObject } from 'ai';
 import { z } from 'zod';
-import { getModelInfo } from './models';
+import { getModelInfo, AI_MODELS } from './models';
 import { providers } from './providers';
 import { AIResponse } from '@/types/ai';
 
@@ -43,10 +43,17 @@ export async function generateAIText({
   temperature?: number;
 }) {
   try {
+    console.log('🔍 generateAIText called with model:', model);
+    console.log('🔍 Available models in AI_MODELS:', Object.keys(AI_MODELS));
+    
     const modelInfo = getModelInfo(model);
     if (!modelInfo) {
+      console.error(`❌ Model not found: "${model}"`);
+      console.error('Available models:', Object.keys(AI_MODELS));
       throw new Error(`Model not found: ${model}`);
     }
+    
+    console.log('✅ Found model info:', modelInfo.name, 'provider:', modelInfo.provider);
 
     // Only use direct SDK on server-side
     if (typeof window === 'undefined') {

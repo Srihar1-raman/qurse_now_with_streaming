@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { AuthUser } from '@/lib/supabase';
 
@@ -26,6 +27,7 @@ interface AuthProviderProps {
 }
 
 export default function AuthProvider({ children }: AuthProviderProps) {
+  const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -133,9 +135,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
       throw error;
     }
     // Redirect to home page after sign out
-    if (typeof window !== 'undefined') {
-      window.location.href = '/';
-    }
+    router.push('/');
   };
 
   const value = {

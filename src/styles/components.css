@@ -1180,6 +1180,15 @@ body::-webkit-scrollbar {
 }
 
 /* Conversation Page */
+.conversation-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 768px;
+  margin: 0 auto;
+}
+
 .conversation-container {
   flex: 1;
   display: flex;

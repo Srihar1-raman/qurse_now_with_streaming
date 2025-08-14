@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '@/lib/ThemeContext';
 import { useAuth } from './SessionProvider';
 import { SupabaseService, ConversationWithCount } from '@/lib/supabase-service';
@@ -25,7 +26,8 @@ interface ConversationGroup {
 
 export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps) {
   const { resolvedTheme, mounted } = useTheme();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [chatHistory, setChatHistory] = useState<ConversationWithCount[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
@@ -72,9 +74,9 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
   const loadConversations = useCallback(async (forceRefresh = false) => {
     if (!user?.id) return;
     
-    // Don't load if we recently fetched data (within 30 seconds) unless forced
+    // Don't load if we recently fetched data (within 10 seconds) unless forced
     const now = Date.now();
-    if (!forceRefresh && (now - lastDataFetchRef.current) < 30000) {
+    if (!forceRefresh && (now - lastDataFetchRef.current) < 10000) {
       console.log('Skipping conversation load - data was recently fetched');
       return;
     }
@@ -90,7 +92,7 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
       if (!isConnected && !forceRefresh) {
         console.warn('Supabase connection unhealthy, attempting to use cached data');
         // Try to get cached data from SupabaseService
-        const cachedData = await SupabaseService.getConversations(user.id);
+        const cachedData = await SupabaseService.getConversations(user.id, false);
         if (cachedData.length > 0) {
           setChatHistory(cachedData);
           setLastRefreshTime(now);
@@ -98,7 +100,7 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
         }
       }
       
-      const conversations = await SupabaseService.getConversations(user.id);
+      const conversations = await SupabaseService.getConversations(user.id, forceRefresh);
       setChatHistory(conversations);
       setError(null);
       setLastRefreshTime(now);
@@ -132,81 +134,71 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
 
   // Load conversations when sidebar opens or user changes
   useEffect(() => {
-    if (isOpen && user?.id) {
-      // Clear any existing retry timeout
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
-      
-      // Force refresh if data is stale (older than 5 minutes)
-      const now = Date.now();
-      const isDataStale = (now - lastDataFetchRef.current) > 5 * 60 * 1000;
-      
-      if (isDataStale || chatHistory.length === 0) {
-        loadConversations(true);
-      } else {
-        loadConversations(false);
-      }
-    } else if (isOpen && !user?.id) {
-      setChatHistory([]);
-      setError(null);
-      setConnectionStatus('unknown');
+    // Don't do anything if auth is still loading
+    if (authLoading) {
+      console.log('Auth still loading, waiting...');
+      return;
     }
-  }, [isOpen, user?.id, loadConversations]);
 
-  // Enhanced periodic refresh with connection monitoring
+    const loadData = async () => {
+      if (isOpen && user?.id) {
+        console.log('Sidebar opened, loading conversations for user:', user.id);
+        try {
+          setIsLoading(true);
+          setError(null);
+          const conversations = await SupabaseService.getConversations(user.id, true);
+          console.log('Loaded conversations:', conversations.length);
+          setChatHistory(conversations);
+          setLastRefreshTime(Date.now());
+          lastDataFetchRef.current = Date.now();
+        } catch (error) {
+          console.error('Error loading conversations:', error);
+          setError('Failed to load conversations');
+          setChatHistory([]);
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (isOpen && !user?.id) {
+        console.log('No user found, clearing chat history');
+        setChatHistory([]);
+        setError(null);
+        setConnectionStatus('unknown');
+      }
+    };
+
+    loadData();
+  }, [isOpen, user?.id, authLoading]);
+
+  // Periodic refresh - only when sidebar is open and user is authenticated
   useEffect(() => {
-    if (!isOpen || !user?.id) {
-      // Clear intervals when sidebar is closed
+    if (!isOpen || !user?.id || authLoading) {
+      // Clear intervals when sidebar is closed or user not ready
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
-      if (connectionCheckIntervalRef.current) {
-        clearInterval(connectionCheckIntervalRef.current);
-        connectionCheckIntervalRef.current = null;
-      }
       return;
     }
 
-    // Refresh conversations every 3 minutes (reduced from 5)
-    refreshIntervalRef.current = setInterval(() => {
-      const timeSinceLastRefresh = Date.now() - lastRefreshTime;
-      if (timeSinceLastRefresh >= 3 * 60 * 1000) { // 3 minutes
-        console.log('Performing periodic refresh of chat history');
-        loadConversations(false);
-      }
-    }, 60 * 1000); // Check every minute
-
-    // Check connection health every 2 minutes
-    connectionCheckIntervalRef.current = setInterval(async () => {
+    // Refresh conversations every 5 minutes (simplified)
+    refreshIntervalRef.current = setInterval(async () => {
+      console.log('Performing periodic refresh of chat history');
       try {
-        const isConnected = await SupabaseService.checkConnection();
-        setConnectionStatus(isConnected ? 'healthy' : 'unhealthy');
-        
-        // If connection is unhealthy and we haven't refreshed recently, try to refresh
-        if (!isConnected && (Date.now() - lastDataFetchRef.current) > 2 * 60 * 1000) {
-          console.log('Connection unhealthy, attempting to refresh data');
-          loadConversations(false);
-        }
+        const conversations = await SupabaseService.getConversations(user.id, true);
+        setChatHistory(conversations);
+        setLastRefreshTime(Date.now());
       } catch (error) {
-        console.warn('Connection health check failed:', error);
-        setConnectionStatus('unhealthy');
+        console.error('Periodic refresh failed:', error);
       }
-    }, 2 * 60 * 1000);
+    }, 5 * 60 * 1000); // Every 5 minutes
 
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
       }
-      if (connectionCheckIntervalRef.current) {
-        clearInterval(connectionCheckIntervalRef.current);
-        connectionCheckIntervalRef.current = null;
-      }
     };
-  }, [isOpen, user?.id, lastRefreshTime, loadConversations]);
+  }, [isOpen, user?.id, authLoading]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -225,22 +217,28 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
 
   // Listen for visibility changes to refresh data when tab becomes visible
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (!document.hidden && isOpen && user?.id) {
         const now = Date.now();
         const timeSinceLastRefresh = now - lastRefreshTime;
         
-        // Refresh if it's been more than 2 minutes since last refresh
-        if (timeSinceLastRefresh > 2 * 60 * 1000) {
+        // Refresh if it's been more than 1 minute since last refresh
+        if (timeSinceLastRefresh > 1 * 60 * 1000) {
           console.log('Tab became visible, refreshing chat history');
-          loadConversations(false);
+          try {
+            const conversations = await SupabaseService.getConversations(user.id, true);
+            setChatHistory(conversations);
+            setLastRefreshTime(now);
+          } catch (error) {
+            console.error('Visibility refresh failed:', error);
+          }
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isOpen, user?.id, lastRefreshTime, loadConversations]);
+  }, [isOpen, user?.id, lastRefreshTime]);
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -309,7 +307,8 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
   };
 
   const handleChatClick = (chatId: string) => {
-    window.location.href = `/conversation?id=${chatId}`;
+    router.push(`/conversation?id=${chatId}`);
+    onClose(); // Close the sidebar after navigation
   };
 
   const handleClearHistory = async () => {
@@ -328,7 +327,7 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
         setChatHistory([]);
         setShowClearConfirm(false);
         if (window.location.pathname === '/conversation') {
-          window.location.href = '/';
+          router.push('/');
         }
       } else {
         console.error('Failed to clear history');
@@ -369,7 +368,7 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
           const currentConversationId = currentUrl.searchParams.get('id');
           
           if (currentConversationId === id && window.location.pathname === '/conversation') {
-            window.location.href = '/';
+            router.push('/');
           }
         }
       }
@@ -499,23 +498,6 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
               <h2>Chat History</h2>
                               <div className="header-controls">
                   <button
-                    onClick={() => loadConversations(true)}
-                    className="history-refresh-btn"
-                    disabled={isLoading}
-                    title="Force refresh conversations"
-                  >
-                    <Image 
-                      src={getIconSrc("redo")} 
-                      alt="Refresh" 
-                      width={14} 
-                      height={14} 
-                      className={`icon-sm ${isLoading ? 'spinning' : ''}`}
-                    />
-                  </button>
-                  <div className={`connection-status ${connectionStatus}`} title={`Connection: ${connectionStatus}`}>
-                    <div className="status-dot"></div>
-                  </div>
-                  <button
                     onClick={() => {
                       setShowDebugInfo(!showDebugInfo);
                       updateCacheStats();
@@ -548,7 +530,22 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
             <div className="history-error">
               <p>{error}</p>
               <button 
-                onClick={loadConversations}
+                onClick={async () => {
+                  if (user?.id) {
+                    try {
+                      setIsLoading(true);
+                      setError(null);
+                      const conversations = await SupabaseService.getConversations(user.id, true);
+                      setChatHistory(conversations);
+                      setLastRefreshTime(Date.now());
+                    } catch (error) {
+                      console.error('Retry failed:', error);
+                      setError('Failed to load conversations');
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }
+                }}
                 className="retry-btn"
                 disabled={isLoading}
               >
@@ -557,7 +554,11 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
             </div>
           )}
           
-          {chatHistory.length === 0 && !error && !isLoading ? (
+          {authLoading ? (
+            <div className="history-loading">
+              <p>Loading user session...</p>
+            </div>
+          ) : chatHistory.length === 0 && !error && !isLoading ? (
             <div className="history-empty">
               <Image 
                 src={getIconSrc("history")} 
@@ -632,12 +633,17 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
                   )}
                   <div className="debug-actions">
                     <button 
-                      onClick={() => {
+                      onClick={async () => {
                         if (user?.id) {
-                          SupabaseService.refreshUserCache(user.id).then(() => {
-                            loadConversations(true);
+                          try {
+                            await SupabaseService.refreshUserCache(user.id);
+                            const conversations = await SupabaseService.getConversations(user.id, true);
+                            setChatHistory(conversations);
+                            setLastRefreshTime(Date.now());
                             updateCacheStats();
-                          });
+                          } catch (error) {
+                            console.error('Cache refresh failed:', error);
+                          }
                         }
                       }}
                       className="debug-refresh-btn"

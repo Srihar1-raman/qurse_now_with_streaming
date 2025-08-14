@@ -70,7 +70,6 @@ function ConversationContent() {
   // Web search options
   const webSearchOptions = [
     { name: 'Chat', enabled: false },
-    { name: 'Tavily', enabled: false },
     { name: 'Exa', enabled: true }
   ];
 
@@ -226,33 +225,39 @@ function ConversationContent() {
     };
   }, [isInputModelDropdownOpen, isWebSearchDropdownOpen]);
 
-  // Handle initial message from URL parameters
+  // Handle URL parameters FIRST - model and web search settings
   useEffect(() => {
-    const initialMessage = searchParams.get('message');
     const initialModel = searchParams.get('model');
-    const conversationId = searchParams.get('id');
     const webSearchParam = searchParams.get('webSearch');
     
-    if (initialModel && AI_MODELS[initialModel]) {
-      setSelectedModel(initialModel);
+    if (initialModel) {
+      const decodedModel = decodeURIComponent(initialModel);
+      console.log('Setting initial model from URL:', decodedModel);
+      setSelectedModel(decodedModel);
     }
     
     // Set web search state from URL parameter
     if (webSearchParam === 'true') {
       setWebSearchEnabled(true);
     }
+  }, [searchParams]);
+
+  // Handle conversation loading and initial messages AFTER model is set
+  useEffect(() => {
+    const initialMessage = searchParams.get('message');
+    const conversationId = searchParams.get('id');
     
     // Only proceed if auth loading is complete
     if (loading) {
       return; // Wait for auth to be determined
     }
     
-    // If we have a conversation ID, load the conversation
-    if (conversationId && user?.id && !initialMessageHandledRef.current) {
+    // If we have a conversation ID, load the conversation (always reload when conversation ID changes)
+    if (conversationId && user?.id) {
+      console.log('Loading conversation:', conversationId);
       loadConversation(conversationId);
-      initialMessageHandledRef.current = true;
     } 
-    // If we have an initial message, auto-send it (only after auth status is known)
+    // If we have an initial message, auto-send it (only once per session)
     else if (initialMessage && !initialMessageHandledRef.current) {
       initialMessageHandledRef.current = true;
       
@@ -260,6 +265,11 @@ function ConversationContent() {
       setTimeout(() => {
         handleSendWithMessage(initialMessage);
       }, 100);
+    }
+    // Clear messages if no conversation ID and no initial message
+    else if (!conversationId && !initialMessage && user?.id) {
+      setMessages([]);
+      setConversationTitle('');
     }
   }, [searchParams, user?.id, loading]); // Added 'loading' dependency
 
@@ -284,7 +294,14 @@ function ConversationContent() {
         const data = await response.json();
         const conversation = data.conversation;
         
-        setSelectedModel(conversation.model);
+        // Only set model from conversation if we don't have an initial message (new conversation)
+        const hasInitialMessage = searchParams.get('message');
+        if (!hasInitialMessage) {
+          setSelectedModel(conversation.model);
+          console.log('Setting model from existing conversation:', conversation.model);
+        } else {
+          console.log('Keeping URL model for new conversation, not overriding with:', conversation.model);
+        }
         setConversationTitle(conversation.title);
         
         // Clear existing messages first
@@ -681,8 +698,8 @@ function ConversationContent() {
       // Check if we're on mobile
       const isMobile = window.innerWidth <= 768;
       if (isMobile) {
-        // Route to login page on mobile
-        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+        // Route to login page on mobile  
+        router.push('/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search));
       } else {
         // Show popup on desktop
         setShowAuthPopup(true);
@@ -694,7 +711,7 @@ function ConversationContent() {
 
   const handleNewChatClick = () => {
     // Navigate to home page for new chat
-    window.location.href = '/';
+    router.push('/');
   };
 
   const handleRedoMessage = async (messageIndex: number) => {
@@ -755,7 +772,7 @@ function ConversationContent() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="homepage-container">
       <Header 
         showNewChatButton={true}
         onNewChatClick={handleNewChatClick}
@@ -768,7 +785,7 @@ function ConversationContent() {
         onClose={() => setIsHistoryOpen(false)}
       />
       
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', maxWidth: '768px', margin: '0 auto' }}>
+      <main className="conversation-main-content">
         {/* Conversation Container */}
         <div className="conversation-container">
           <div className="conversation-thread">
@@ -1036,11 +1053,6 @@ function ConversationContent() {
                                  {option.name === 'Exa' && (
                                    <span className="image-badge">
                                      <Image src={getIconSrc("exa", selectedWebSearchOption === option.name)} alt="Exa" width={10} height={10} className="badge-icon" />
-                                   </span>
-                                 )}
-                                 {option.name === 'Tavily' && option.enabled && (
-                                   <span className="image-badge">
-                                     <Image src={getIconSrc("internet", selectedWebSearchOption === option.name)} alt="Tavily" width={10} height={10} className="badge-icon" />
                                    </span>
                                  )}
                               </div>

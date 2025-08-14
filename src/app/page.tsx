@@ -138,7 +138,7 @@ export default function Home() {
       const encodedMessage = encodeURIComponent(inputValue.trim());
       const encodedModel = encodeURIComponent(selectedModel);
       const webSearchParam = webSearchEnabled ? '&webSearch=true' : '';
-      window.location.href = `/conversation?message=${encodedMessage}&model=${encodedModel}${webSearchParam}`;
+      router.push(`/conversation?message=${encodedMessage}&model=${encodedModel}${webSearchParam}`);
     }
   };
 

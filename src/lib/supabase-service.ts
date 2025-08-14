@@ -16,7 +16,7 @@ export interface ConversationWithCount extends Omit<Conversation, 'id'> {
 
 // Enhanced cache management with better invalidation
 const conversationCache = new Map<string, { data: ConversationWithCount[]; timestamp: number; version: number }>();
-const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes for more responsive updates
 const CACHE_VERSION = 1; // Increment this when cache structure changes
 
 // Retry configuration
@@ -90,8 +90,8 @@ export class SupabaseService {
     // Clear the cache entry to force a fresh fetch
     conversationCache.delete(`conversations_${userId}`);
     
-    // Fetch fresh data
-    return await this.getConversations(userId);
+    // Fetch fresh data with force refresh
+    return await this.getConversations(userId, true);
   }
 
   // Get cache statistics for debugging
@@ -194,28 +194,29 @@ export class SupabaseService {
       return null
     }
 
-    // Invalidate cache for this user
-    this.invalidateUserCache(userId);
+    // Clear cache for this user to force refresh
+    this.clearConversationCache(userId);
 
     return data.id
   }
 
-  static async getConversations(userId: string): Promise<ConversationWithCount[]> {
-    // Check cache first
+  static async getConversations(userId: string, forceRefresh: boolean = false): Promise<ConversationWithCount[]> {
+    // Check cache first (unless force refresh is requested)
     const cacheKey = `conversations_${userId}`;
     const cached = conversationCache.get(cacheKey);
     const now = Date.now();
     
-    // Check if cache is valid (not expired and version matches)
-    if (cached && 
+    // Check if cache is valid (not expired and version matches) and not forcing refresh
+    if (!forceRefresh && cached && 
         (now - cached.timestamp) < CACHE_DURATION && 
         cached.version === CACHE_VERSION) {
+      console.log('Returning cached conversations data');
       return cached.data;
     }
 
-    // Check connection health before making the call
+    // Check connection health before making the call (unless force refresh)
     const isConnected = await this.checkConnection();
-    if (!isConnected) {
+    if (!isConnected && !forceRefresh) {
       console.warn('Supabase connection unhealthy, returning cached data if available');
       // Return cached data even if expired, but only if version matches
       if (cached && cached.version === CACHE_VERSION) {
@@ -226,17 +227,54 @@ export class SupabaseService {
 
     try {
       // Use retry logic for the API call
-      const data = await this.retryOperation(async () => {
-        const { data, error } = await supabase
+      console.log(`Fetching conversations for user ${userId} ${forceRefresh ? '(force refresh)' : '(normal)'}`);
+      
+      // First try the RPC function, if it fails, use direct query
+      let data;
+      try {
+        const result = await supabase
           .rpc('get_conversations_with_message_count', { user_uuid: userId });
-
-        if (error) {
-          throw error;
+        
+        if (result.error) {
+          console.error('RPC function error:', result.error);
+          throw new Error(`RPC error: ${result.error.message}`);
         }
+        
+        data = result.data || [];
+        console.log('RPC function succeeded, got', data.length, 'conversations');
+      } catch (rpcError) {
+        console.warn('RPC function failed, trying direct query:', rpcError);
+        
+        // Fallback to direct query
+        const result = await supabase
+          .from('conversations')
+          .select(`
+            id,
+            user_id,
+            title,
+            model_name as model,
+            created_at,
+            updated_at,
+            is_archived
+          `)
+          .eq('user_id', userId)
+          .eq('is_archived', false)
+          .is('parent_conversation_id', null)
+          .order('updated_at', { ascending: false });
+        
+        if (result.error) {
+          throw new Error(`Direct query error: ${result.error.message}`);
+        }
+        
+        // Add message_count as 0 for fallback data
+        data = (result.data || []).map((conv: any) => ({
+          ...conv,
+          message_count: 0
+        }));
+        console.log('Direct query succeeded, got', data.length, 'conversations');
+      }
 
-        return data || [];
-      });
-
+      console.log(`Successfully fetched ${data.length} conversations`);
       // Cache the result
       conversationCache.set(cacheKey, { data, timestamp: now, version: CACHE_VERSION });
       return data;
@@ -282,7 +320,7 @@ export class SupabaseService {
       return false
     }
 
-    // Invalidate cache for this conversation's user
+    // Clear cache for this conversation's user to force immediate refresh
     try {
       const { data: conversation } = await supabase
         .from('conversations')
@@ -291,10 +329,10 @@ export class SupabaseService {
         .single();
       
       if (conversation?.user_id) {
-        this.invalidateUserCache(conversation.user_id);
+        this.clearConversationCache(conversation.user_id);
       }
     } catch (cacheError) {
-      console.warn('Failed to invalidate cache after title update:', cacheError);
+      console.warn('Failed to clear cache after title update:', cacheError);
     }
 
     return true
@@ -339,9 +377,9 @@ export class SupabaseService {
       return false
     }
 
-    // Invalidate cache for this user
+    // Clear cache for this user to force immediate refresh
     if (userId) {
-      this.invalidateUserCache(userId);
+      this.clearConversationCache(userId);
     }
 
     return true

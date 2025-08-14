@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { useTheme } from '@/lib/ThemeContext';
 import { useAuth } from '@/components/SessionProvider';
@@ -11,6 +11,7 @@ import { MODEL_GROUPS, isReasoningModel } from '@/lib/ai-service';
 
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState('accounts');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -183,7 +184,7 @@ export default function SettingsPage() {
         await signOut();
         
         // Redirect to home page
-        window.location.href = '/';
+        router.push('/');
       } else {
         const errorData = await response.json();
         console.error('Error deleting account:', errorData);
@@ -210,7 +211,7 @@ export default function SettingsPage() {
       if (response.ok) {
         setUserStats({ totalConversations: 0 });
         setShowClearChatsConfirm(false);
-        window.location.href = '/';
+        router.push('/');
       } else {
         setIsClearingChats(false);
       }
@@ -259,7 +260,7 @@ export default function SettingsPage() {
   ];
 
   const handleNewChatClick = () => {
-    window.location.href = '/';
+    router.push('/');
   };
 
   const handleHistoryClick = () => {
