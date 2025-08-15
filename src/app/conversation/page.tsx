@@ -43,6 +43,7 @@ function ConversationContent() {
   const [aiError, setAiError] = useState<string | null>(null);
   const lastSubmitTimeRef = useRef(0);
   const [selectedModel, setSelectedModel] = useState('Deepseek R1 Distill 70B');
+  const [modelInitialized, setModelInitialized] = useState(false);
   const [isInputModelDropdownOpen, setIsInputModelDropdownOpen] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [showAuthPopup, setShowAuthPopup] = useState(false);
@@ -66,12 +67,32 @@ function ConversationContent() {
   const initialMessageHandledRef = useRef(false);
   
   const [conversationTitle, setConversationTitle] = useState('');
+  const [showWebModeSuggestion, setShowWebModeSuggestion] = useState(false);
 
   // Web search options
   const webSearchOptions = [
     { name: 'Chat', enabled: false },
     { name: 'Exa', enabled: true }
   ];
+
+  // Check if AI response suggests switching to web mode
+  const checkForWebModeSuggestion = (aiResponse: string) => {
+    const webModeKeywords = [
+      'switch to web mode',
+      'web mode (exa)',
+      'consider switching to web mode',
+      'web search tools',
+      'search the internet',
+      '💡 **tip:** for the most accurate',
+      '---\n💡 **tip:**'
+    ];
+    
+    const hasWebModeSuggestion = webModeKeywords.some(keyword => 
+      aiResponse.toLowerCase().includes(keyword.toLowerCase())
+    );
+    
+    setShowWebModeSuggestion(hasWebModeSuggestion);
+  };
 
   // Get all available models from enabled groups
   const getAvailableModels = () => {
@@ -225,40 +246,56 @@ function ConversationContent() {
     };
   }, [isInputModelDropdownOpen, isWebSearchDropdownOpen]);
 
-  // Handle URL parameters FIRST - model and web search settings
+  // Handle initial message from URL parameters - SINGLE useEffect like old working version
   useEffect(() => {
+    const initialMessage = searchParams.get('message');
     const initialModel = searchParams.get('model');
+    const conversationId = searchParams.get('id');
     const webSearchParam = searchParams.get('webSearch');
     
-    if (initialModel) {
-      const decodedModel = decodeURIComponent(initialModel);
+    console.log('🔍 URL Parameters received:', { initialMessage, initialModel, conversationId, webSearchParam });
+    
+    // Reset modelInitialized for each URL change to ensure proper re-initialization
+    setModelInitialized(false);
+    
+    // Reset initialMessageHandledRef when conversation ID changes to allow loading different conversations
+    initialMessageHandledRef.current = false;
+    
+    // Set model from URL parameters FIRST - with robust fallback
+    let modelToSet = initialModel;
+    if (!modelToSet && typeof window !== 'undefined') {
+      // Fallback: check window.location.search if searchParams doesn't have the model
+      const urlParams = new URLSearchParams(window.location.search);
+      modelToSet = urlParams.get('model');
+    }
+    
+    if (modelToSet) {
+      const decodedModel = decodeURIComponent(modelToSet);
       console.log('Setting initial model from URL:', decodedModel);
       setSelectedModel(decodedModel);
     }
+    
+    // Always mark as initialized after processing (whether model was set or not)
+    setModelInitialized(true);
     
     // Set web search state from URL parameter
     if (webSearchParam === 'true') {
       setWebSearchEnabled(true);
     }
-  }, [searchParams]);
-
-  // Handle conversation loading and initial messages AFTER model is set
-  useEffect(() => {
-    const initialMessage = searchParams.get('message');
-    const conversationId = searchParams.get('id');
     
     // Only proceed if auth loading is complete
     if (loading) {
       return; // Wait for auth to be determined
     }
     
-    // If we have a conversation ID, load the conversation (always reload when conversation ID changes)
-    if (conversationId && user?.id) {
+    // If we have a conversation ID, load the conversation
+    if (conversationId && user?.id && !initialMessageHandledRef.current) {
       console.log('Loading conversation:', conversationId);
       loadConversation(conversationId);
+      initialMessageHandledRef.current = true;
     } 
-    // If we have an initial message, auto-send it (only once per session)
-    else if (initialMessage && !initialMessageHandledRef.current) {
+    // If we have an initial message, auto-send it (only after auth status is known AND model is initialized)
+    else if (initialMessage && !initialMessageHandledRef.current && modelInitialized) {
       initialMessageHandledRef.current = true;
       
       // Auto-send the initial message directly
@@ -271,7 +308,7 @@ function ConversationContent() {
       setMessages([]);
       setConversationTitle('');
     }
-  }, [searchParams, user?.id, loading]); // Added 'loading' dependency
+  }, [searchParams, user?.id, loading, modelInitialized]); // Added 'loading' and 'modelInitialized' dependencies
 
   // Handle web search parameter on client-side only
   useEffect(() => {
@@ -285,6 +322,8 @@ function ConversationContent() {
     }
   }, []);
 
+
+
   // Load conversation from Supabase
   const loadConversation = async (conversationId: string) => {
     try {
@@ -294,13 +333,17 @@ function ConversationContent() {
         const data = await response.json();
         const conversation = data.conversation;
         
-        // Only set model from conversation if we don't have an initial message (new conversation)
-        const hasInitialMessage = searchParams.get('message');
-        if (!hasInitialMessage) {
+        // Preserve URL model if we have one, otherwise use conversation model
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlModel = urlParams.get('model');
+        
+        if (urlModel) {
+          const decodedUrlModel = decodeURIComponent(urlModel);
+          console.log('Preserving URL model over conversation model:', decodedUrlModel);
+          setSelectedModel(decodedUrlModel);
+        } else {
           setSelectedModel(conversation.model);
           console.log('Setting model from existing conversation:', conversation.model);
-        } else {
-          console.log('Keeping URL model for new conversation, not overriding with:', conversation.model);
         }
         setConversationTitle(conversation.title);
         
@@ -365,7 +408,44 @@ function ConversationContent() {
       // Convert existing messages to AI service format for context
       const aiMessages: AIChatMessage[] = [];
       
-      // NO SYSTEM PROMPTS - Let models respond naturally
+      // Add system prompt based on mode
+      if (webSearchEnabled) {
+        // Exa mode: Aggressive system prompt for web search (handled by API)
+        // No need to add system message here as it's handled in generateAITextWithTools
+      } else {
+        // Chat mode: Add system prompt to let models know they are QURSE
+        aiMessages.push({
+          role: 'system',
+          content: `You are QURSE, an AI assistant designed to help users with conversations, questions, and general assistance. You are helpful, knowledgeable, and engaging. Respond naturally and conversationally while being informative and supportive.
+
+IMPORTANT: Always answer the user's question first with your best knowledge. Then, if the query requires real-time information, current events, recent data, or would benefit from web search tools for a more accurate and up-to-date answer, add a suggestion at the end of your response like this:
+
+"---\n💡 **Tip:** For the most accurate and up-to-date information about this topic, consider switching to Web Mode (Exa) which can search the internet for current data."
+
+CRITICAL: You CANNOT switch to Web Mode yourself. You can only SUGGEST that the user switch. Do NOT say things like "I'll switch to Web Mode" or "Let me search for you" - you don't have that capability in Chat Mode.
+
+DO NOT:
+- Say "I'm switching to Web Mode" or "Let me search for you"
+- Pretend to perform web searches
+- Act like you have access to real-time information
+- Say "I'll fetch the latest updates" or similar phrases
+
+ONLY:
+- Answer with your training knowledge
+- Suggest the user switch to Web Mode if needed
+- Wait for the user to actually switch modes
+
+Examples of when to suggest Web Mode:
+- Current events, news, or recent developments
+- Real-time data, statistics, or market information
+- Recent product releases, updates, or reviews
+- Current weather, traffic, or location-based information
+- Recent research, studies, or academic publications
+- Live sports scores, results, or schedules
+
+Always provide a helpful answer first, then suggest the mode switch if it would improve the response quality. Remember: you can only suggest, not perform the switch.`
+        });
+      }
       
       // Add conversation history (last 9 messages for context, excluding current message)
       const recentMessages = messages.slice(-9);
@@ -443,6 +523,9 @@ function ConversationContent() {
         if (result.sources && result.sources.length > 0) {
           setCurrentSources(result.sources);
         }
+        
+        // Check if AI suggests switching to web mode
+        checkForWebModeSuggestion(result.choices[0].message.content);
       } catch (error) {
         console.error('AI API error:', error);
         // Try simulation as fallback
@@ -532,6 +615,9 @@ function ConversationContent() {
 
     // Clear any previous AI errors
     setAiError(null);
+    
+    // Hide web mode suggestion when new message is sent
+    setShowWebModeSuggestion(false);
 
     // Prevent rapid-fire submissions (minimum 500ms between sends)
     const currentTime = Date.now();
@@ -814,6 +900,28 @@ function ConversationContent() {
               />
             ))}
             
+            {/* Web Mode Suggestion */}
+            {showWebModeSuggestion && !webSearchEnabled && (
+              <div className="web-mode-suggestion">
+                <div className="suggestion-content">
+                  <div className="suggestion-text">
+                    <strong>Switch to Web Mode for better answers</strong>
+                    <p>The AI suggested switching to Web Mode (Exa) to get more accurate and up-to-date information.</p>
+                  </div>
+                  <button 
+                    className="switch-mode-btn"
+                    onClick={() => {
+                      setWebSearchEnabled(true);
+                      setSelectedWebSearchOption('Exa');
+                      setShowWebModeSuggestion(false);
+                    }}
+                  >
+                    Switch to Web Mode
+                  </button>
+                </div>
+              </div>
+            )}
+            
             {isLoading && (
               <div className="message bot-message">
                 <div style={{ maxWidth: '95%', marginRight: 'auto' }}>
@@ -1039,6 +1147,10 @@ function ConversationContent() {
                               onClick={() => {
                                 setSelectedWebSearchOption(option.name);
                                 setWebSearchEnabled(option.enabled);
+                                // Hide web mode suggestion if user manually switches to web mode
+                                if (option.enabled) {
+                                  setShowWebModeSuggestion(false);
+                                }
                                 setIsWebSearchDropdownOpen(false);
                               }}
                               className={`model-item-enhanced model-item-small ${selectedWebSearchOption === option.name ? 'active' : ''}`}

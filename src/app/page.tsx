@@ -138,7 +138,11 @@ export default function Home() {
       const encodedMessage = encodeURIComponent(inputValue.trim());
       const encodedModel = encodeURIComponent(selectedModel);
       const webSearchParam = webSearchEnabled ? '&webSearch=true' : '';
-      router.push(`/conversation?message=${encodedMessage}&model=${encodedModel}${webSearchParam}`);
+      
+      // Use router.push but ensure proper parameter handling
+      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}${webSearchParam}`;
+      console.log('Navigating to:', url);
+      router.push(url);
     }
   };
 

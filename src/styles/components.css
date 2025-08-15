@@ -5692,3 +5692,93 @@ html.dropdown-open {
   }
 }
 
+/* Web Mode Suggestion Styles */
+.web-mode-suggestion {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  max-width: 95%;
+  margin-right: auto;
+  animation: slideInUp 0.3s ease-out;
+}
+
+.suggestion-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.suggestion-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-text strong {
+  display: block;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.suggestion-text p {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.switch-mode-btn {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.switch-mode-btn:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+.switch-mode-btn:active {
+  transform: translateY(0);
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Mobile responsive for web mode suggestion */
+@media (max-width: 768px) {
+  .web-mode-suggestion {
+    margin: 12px 0;
+    padding: 12px;
+  }
+  
+  .suggestion-content {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .switch-mode-btn {
+    text-align: center;
+  }
+}
+

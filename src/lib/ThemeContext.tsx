@@ -99,6 +99,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [theme, resolveTheme, applyTheme]);
 
+
+
   const value: ThemeContextType = {
     theme,
     setTheme,

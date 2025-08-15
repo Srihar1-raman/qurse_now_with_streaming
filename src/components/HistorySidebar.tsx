@@ -241,33 +241,49 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
   }, [isOpen, user?.id, lastRefreshTime]);
 
   const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 24) {
-      return `${diffInHours}h ago`;
-    } else {
-      const diffInDays = Math.floor(diffInHours / 24);
-      return `${diffInDays}d ago`;
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        return 'Invalid time';
+      }
+      
+      const now = new Date();
+      const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+      
+      if (diffInHours < 24) {
+        return `${diffInHours}h ago`;
+      } else {
+        const diffInDays = Math.floor(diffInHours / 24);
+        return `${diffInDays}d ago`;
+      }
+    } catch (error) {
+      return 'Invalid time';
     }
   };
 
   const getDateGroup = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 1) {
-      return 'Today';
-    } else if (diffInHours < 24) {
-      return 'Last 24 hours';
-    } else if (diffInHours < 168) { // 7 days
-      return 'Last 7 days';
-    } else if (diffInHours < 720) { // 30 days
-      return 'Last 30 days';
-    } else {
-      return 'Older';
+    try {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        return 'Unknown';
+      }
+      
+      const now = new Date();
+      const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+      
+      if (diffInHours < 1) {
+        return 'Today';
+      } else if (diffInHours < 24) {
+        return 'Last 24 hours';
+      } else if (diffInHours < 168) { // 7 days
+        return 'Last 7 days';
+      } else if (diffInHours < 720) { // 30 days
+        return 'Last 30 days';
+      } else {
+        return 'Older';
+      }
+    } catch (error) {
+      return 'Unknown';
     }
   };
 
@@ -275,11 +291,13 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
     const groups: Record<string, ConversationWithCount[]> = {};
     
     conversations.forEach(conversation => {
-      const group = getDateGroup(conversation.updated_at);
-      if (!groups[group]) {
-        groups[group] = [];
+      if (conversation.updated_at) {
+        const group = getDateGroup(conversation.updated_at);
+        if (!groups[group]) {
+          groups[group] = [];
+        }
+        groups[group].push(conversation);
       }
-      groups[group].push(conversation);
     });
 
     // Sort groups in chronological order
@@ -288,9 +306,10 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
       .filter(group => groups[group])
       .map(group => ({
         label: group,
-        conversations: groups[group].sort((a, b) => 
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-        )
+        conversations: groups[group].sort((a, b) => {
+          if (!a.updated_at || !b.updated_at) return 0;
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        })
       }));
   };
 
@@ -301,8 +320,7 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
     
     const query = searchQuery.toLowerCase();
     return chatHistory.filter(chat => 
-      chat.title.toLowerCase().includes(query) ||
-      chat.model.toLowerCase().includes(query)
+      (chat.title && chat.title.toLowerCase().includes(query))
     );
   };
 
@@ -754,8 +772,7 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
                                   <>
                                     <div className="tree-item-title">{chat.title}</div>
                                     <div className="tree-item-meta">
-                                      <span className="tree-item-model">{chat.model}</span>
-                                      <span className="tree-item-time">{formatTimestamp(chat.updated_at)}</span>
+                                      <span className="tree-item-time">{chat.updated_at ? formatTimestamp(chat.updated_at) : 'Unknown Time'}</span>
                                     </div>
                                   </>
                                 )}
