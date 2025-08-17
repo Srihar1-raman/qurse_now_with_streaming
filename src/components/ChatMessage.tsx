@@ -26,6 +26,10 @@ interface ChatMessageProps {
     domain: string;
     url: string;
     favicon?: string;
+    arxiv_id?: string;
+    authors?: string;
+    abstract?: string;
+    pdf_url?: string;
   }>;
   onSourcesClick?: () => void; // Add callback for sources button click
 }
@@ -232,6 +236,50 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
                 {parsedResponse.reasoning}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ArXiv Papers Inline - show top 3 papers side by side */}
+        {!isUser && sources && sources.length > 0 && sources.some(s => s.domain === 'arxiv.org') && (
+          <div className="arxiv-papers-wrapper">
+            <div className="arxiv-papers-inline">
+              {sources
+                .filter(source => source.domain === 'arxiv.org')
+                .slice(0, 3)
+                .map((source, index) => (
+                  <div 
+                    key={index} 
+                    className={`arxiv-paper-card arxiv-paper-${Math.min(sources.length, 3)}`}
+                    onClick={() => source.pdf_url && window.open(source.pdf_url, '_blank', 'noopener,noreferrer')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="arxiv-paper-header">
+                      <div className="arxiv-paper-favicon">
+                        <img src={source.favicon || '/icon/arxiv-logo.svg'} alt="ArXiv" width={20} height={20} />
+                      </div>
+                      <div className="arxiv-paper-title">
+                        {source.title}
+                      </div>
+                      <div className="arxiv-paper-score">
+                        {Math.round((source.relevance_score || 0) * 100)}%
+                      </div>
+                    </div>
+                    
+                    {/* Automatic PDF iframe rendering */}
+                    {source.pdf_url && (
+                      <div className="arxiv-pdf-container">
+                        <iframe
+                          src={source.pdf_url}
+                          width="100%"
+                          height="300px"
+                          style={{ border: 'none', borderRadius: '6px' }}
+                          title={`PDF: ${source.title}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
           </div>
         )}
 

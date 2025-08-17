@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useTheme } from '@/lib/ThemeContext';
 
@@ -24,6 +24,25 @@ interface SourcesSidebarProps {
 
 export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSidebarProps) {
   const { resolvedTheme, mounted } = useTheme();
+  const [expandedPdfs, setExpandedPdfs] = useState<Set<number>>(new Set());
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close sidebar
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClose]);
 
   // Get the correct icon path based on theme
   const getIconSrc = (iconName: string) => {
@@ -35,10 +54,20 @@ export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSide
     return `/${iconFolder}/${iconName}.svg`;
   };
 
+  const togglePdfExpansion = (index: number) => {
+    const newExpanded = new Set(expandedPdfs);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedPdfs(newExpanded);
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="sources-sidebar">
+    <div className="sources-sidebar" ref={sidebarRef}>
       <div className="sources-sidebar-header">
         <h3>Sources ({sources.length})</h3>
         <button onClick={onClose} className="sources-close-btn">
@@ -51,9 +80,12 @@ export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSide
           <div 
             key={index} 
             className="source-sidebar-item"
-            onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')}
           >
-            <div className="source-sidebar-header">
+            <div 
+              className="source-sidebar-header"
+              onClick={() => window.open(source.url, '_blank', 'noopener,noreferrer')}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="source-sidebar-favicon">
                 {source.favicon ? (
                   <img src={source.favicon} alt="" width={20} height={20} />
@@ -66,43 +98,36 @@ export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSide
               <div className="source-sidebar-info">
                 <div className="source-sidebar-title">{source.title}</div>
                 <div className="source-sidebar-domain">{source.domain}</div>
-                {/* Show arXiv-specific information */}
-                {source.arxiv_id && (
-                  <div className="source-sidebar-arxiv-info">
-                    <div className="source-sidebar-authors">
-                      {source.authors && `Authors: ${source.authors}`}
-                    </div>
-                    {source.submission_date && (
-                      <div className="source-sidebar-date">
-                        Submitted: {source.submission_date}
-                      </div>
-                    )}
-                    {source.abstract && (
-                      <div className="source-sidebar-abstract">
-                        {source.abstract.length > 150 
-                          ? `${source.abstract.substring(0, 150)}...` 
-                          : source.abstract}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
               <div className="source-sidebar-score">
                 {Math.round(source.relevance_score * 100)}%
               </div>
             </div>
-            {/* Show PDF link for arXiv papers */}
+            
+            {/* Show PDF controls for arXiv papers */}
             {source.pdf_url && (
               <div className="source-sidebar-actions">
                 <button 
-                  className="source-sidebar-pdf-btn"
+                  className={`source-sidebar-toggle-pdf-btn ${expandedPdfs.has(index) ? 'expanded' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.open(source.pdf_url, '_blank', 'noopener,noreferrer');
+                    togglePdfExpansion(index);
                   }}
                 >
-                  View PDF
+                  {expandedPdfs.has(index) ? 'Hide PDF' : 'Show PDF'}
                 </button>
+              </div>
+            )}
+
+            {/* Expandable PDF Container */}
+            {source.pdf_url && expandedPdfs.has(index) && (
+              <div className="source-sidebar-pdf-container">
+                <iframe
+                  src={source.pdf_url}
+                  width="100%"
+                  height="600px"
+                  style={{ border: 'none' }}
+                />
               </div>
             )}
           </div>

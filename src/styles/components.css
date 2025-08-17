@@ -5685,33 +5685,7 @@ html.dropdown-open {
   flex-shrink: 0;
 }
 
-/* arXiv-specific styles */
-.source-sidebar-arxiv-info {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-border);
-}
-
-.source-sidebar-authors {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-bottom: 4px;
-  line-height: 1.3;
-}
-
-.source-sidebar-date {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  margin-bottom: 6px;
-}
-
-.source-sidebar-abstract {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-  margin-bottom: 8px;
-  font-style: italic;
-}
+/* arXiv-specific styles - removed since we're not displaying metadata anymore */
 
 .source-sidebar-actions {
   margin-top: 12px;
@@ -5858,5 +5832,188 @@ html.dropdown-open {
   .switch-mode-btn {
     text-align: center;
   }
+}
+
+/* PDF Toggle Button */
+.source-sidebar-toggle-pdf-btn {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.source-sidebar-toggle-pdf-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-hover);
+}
+
+.source-sidebar-toggle-pdf-btn.expanded {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.source-sidebar-toggle-pdf-btn.expanded:hover {
+  background: var(--color-primary-hover);
+}
+
+/* PDF Container */
+.source-sidebar-pdf-container {
+  margin-top: 16px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+}
+
+/* PDF Viewer - iframe based */
+.source-sidebar-pdf-container iframe {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ArXiv Papers Inline - rendered between reasoning and message content */
+.arxiv-papers-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.arxiv-papers-inline {
+  margin: 16px 0;
+  display: flex;
+  flex-direction: row;
+  gap: 12px; /* Reduced from 16px to fit papers better */
+  flex-wrap: nowrap; /* Prevent wrapping */
+  justify-content: flex-start; /* Align to start */
+  width: fit-content; /* Only take needed width */
+  max-width: 100%; /* Never exceed parent */
+  overflow: hidden; /* Prevent overflow */
+}
+
+.arxiv-paper-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+.arxiv-paper-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Dynamic sizing based on number of sources - strict constraints */
+.arxiv-paper-1 {
+  width: 100%;
+  max-width: 600px; /* Reduced from 800px */
+}
+
+.arxiv-paper-2 {
+  width: 260px; /* Reduced from 280px */
+  min-width: 260px;
+  max-width: 260px;
+}
+
+.arxiv-paper-3 {
+  width: 220px; /* Reduced from 250px */
+  min-width: 220px;
+  max-width: 220px;
+}
+
+/* Paper header with logo, title, and score */
+.arxiv-paper-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.arxiv-paper-favicon {
+  flex-shrink: 0;
+}
+
+.arxiv-paper-favicon img {
+  border-radius: 4px;
+}
+
+.arxiv-paper-title {
+  flex: 1;
+  font-weight: 500;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.arxiv-paper-score {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+  padding: 4px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+/* PDF Container within paper cards */
+.arxiv-pdf-container {
+  margin: 16px 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: relative; /* Ensure proper stacking context */
+}
+
+.arxiv-pdf-container iframe {
+  display: block;
+  width: 100%;
+  height: 300px;
+  border: none;
+  border-radius: 6px;
+  position: relative; /* Ensure iframe stays above other elements */
+  z-index: 1; /* Ensure iframe is above other content */
+}
+
+/* Fix hover state for paper cards to prevent iframe edge issues */
+.arxiv-paper-card:hover .arxiv-pdf-container {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  transition: all 0.2s ease;
+}
+
+.arxiv-paper-card:hover .arxiv-pdf-container iframe {
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Sources sidebar - simplified without metadata */
+.source-sidebar-item {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  transition: all 0.2s ease;
+}
+
+.source-sidebar-item:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
