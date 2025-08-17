@@ -13,12 +13,16 @@ import { ToolCallOptions } from '@/types/ai';
  * This module provides advanced tool calling capabilities for reasoning models including:
  * - DeepSeek R1 Distill 70B (Groq)
  * - Qwen3 32B (Groq) 
- * - GPT-OSS 120B & 20B (Groq)
+ * - GPT-OSS 120B & 20B (Groq) - Enhanced reasoning models with tool calls
  * - Grok 3 Mini & Grok 4 (XAI)
  * - O4 Mini & GPT-4.1 (OpenAI)
  * - Claude Sonnet 4 (Anthropic)
  * 
- * All GROQ models use standard token management and configuration.
+ * GPT-OSS models are specifically configured as reasoning models with:
+ * - Conservative token management (2 messages, 2048 max tokens)
+ * - Reasoning middleware for step-by-step thinking
+ * - Enhanced provider options (parallelToolCalls: false, reasoningSummary: detailed)
+ * - Aggressive web search with minimal queries for efficiency
  */
 
 // Generate AI response with tool calling for web search
@@ -38,7 +42,8 @@ export async function generateAITextWithTools({
       model,
       webSearchEnabled,
       messagesCount: messages.length,
-      lastMessage: messages[messages.length - 1]?.content
+      lastMessage: messages[messages.length - 1]?.content,
+      isGPTOSS: model.includes('gpt-oss')
     });
 
     const modelInfo = getModelInfo(model);
@@ -50,7 +55,8 @@ export async function generateAITextWithTools({
       name: modelInfo.name,
       provider: modelInfo.provider,
       reasoningModel: modelInfo.reasoningModel,
-      modelType: modelInfo.reasoningModel ? 'Reasoning Model' : 'Standard Model'
+      isGPTOSS: modelInfo.id.includes('gpt-oss'),
+      modelType: modelInfo.id.includes('gpt-oss') ? 'GPT-OSS Reasoning Model' : (modelInfo.reasoningModel ? 'Reasoning Model' : 'Standard Model')
     });
 
     // Skip web search if not enabled
@@ -64,25 +70,40 @@ export async function generateAITextWithTools({
       });
     }
 
-    // For models that support tools, use tool calling
+    // For models that support tools, use Scira-style tool calling
     if (webSearchEnabled && typeof window === 'undefined' && modelInfo.supportsTools && customProviderWithTools) {
-      console.log(`🚀 Using websearch tool calling for ${modelInfo.name} (${modelInfo.provider})`);
+      const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Standard';
+      console.log(`🚀 Using websearch tool calling for ${modelType} ${modelInfo.name} (${modelInfo.provider})`);
       
       // Get the user's query from the last user message
       const userQuery = messages.filter(m => m.role === 'user').pop()?.content || '';
       
       if (userQuery.trim()) {
-        console.log(`🔍 Web search enabled for model: ${userQuery}`);
+        const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Standard';
+        console.log(`🔍 Aggressive web search enabled for ${modelType} model: ${userQuery}`);
         
         // Enhanced token management for Groq models
         let truncatedMessages = messages;
         let maxTokensForModel = maxTokens;
+        let isTokenLimitedModel = false;
         
         if (modelInfo.provider === 'groq') {
-          // Standard settings for all GROQ models
-          truncatedMessages = messages.slice(-3); // Keep only last 3 messages
-          maxTokensForModel = 2048; // Standard token limit for all GROQ models
-          console.log(`🔧 Standard token management for GROQ model ${model}: ${messages.length} → ${truncatedMessages.length} messages, maxTokens: ${maxTokensForModel}`);
+          // Check if it's a reasoning model (Deepseek, Qwen, GPT-OSS) vs regular tool-calling model
+          const reasoningModels = ['deepseek-r1-distill-llama-70b', 'qwen/qwen3-32b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+          isTokenLimitedModel = reasoningModels.includes(modelInfo.id);
+          
+          if (isTokenLimitedModel) {
+            // Conservative settings for reasoning models (DeepSeek, Qwen, GPT-OSS) - they need more context
+            truncatedMessages = messages.slice(-2); // Keep only last 2 messages
+            maxTokensForModel = 2048; // Moderate token limit
+            const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning';
+            console.log(`🧠 Conservative token management for ${modelType} reasoning model ${model}: ${messages.length} → ${truncatedMessages.length} messages, maxTokens: ${maxTokensForModel}`);
+          } else {
+            // Standard settings for regular tool-calling models
+            truncatedMessages = messages.slice(-3); // Keep only last 3 messages
+            maxTokensForModel = 2048; // Standard token limit
+            console.log(`🔧 Standard token management for tool-calling model ${model}: ${messages.length} → ${truncatedMessages.length} messages, maxTokens: ${maxTokensForModel}`);
+          }
         }
 
         // System instructions based on mode
@@ -170,7 +191,7 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
                 reasoningSummary: 'detailed', // Enable detailed reasoning summary
               }
             };
-            console.log(`🧠 Enhanced configuration for GROQ reasoning model: parallelToolCalls=false, reasoningSummary=detailed`);
+            console.log(`🧠 Enhanced configuration for ${modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Groq'} reasoning model: parallelToolCalls=false, reasoningSummary=detailed`);
           }
           
           const result = await streamText({
@@ -179,8 +200,8 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
               ...(arxivMode ? {
                 arxiv_search: arxivTool
               } : {
-                aggressive_web_search: modelInfo.reasoningModel ? 
-                  // Create a more conservative tool for reasoning models
+                aggressive_web_search: isTokenLimitedModel ? 
+                  // Create a more conservative tool for reasoning models (DeepSeek, Qwen, GPT-OSS)
                   tool({
                     description: 'Search the web for current information using Exa AI. Use this tool when you need to find recent news, facts, or updates to answer questions accurately. As a reasoning model, think step-by-step about what information you need, then search efficiently with minimal queries.',
                     parameters: z.object({
@@ -197,7 +218,8 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
                       const limitedQueries = queries.slice(0, Math.min(maxQueries, 2));
                       const limitedResults = Math.min(maxResults, 3);
                       
-                      console.log(`🚨 Conservative Exa search for reasoning model: strategy="${strategy}", maxResults=${limitedResults}, quality="${quality}", topic="${topic}", queries=${limitedQueries.length}`);
+                      const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning';
+                      console.log(`🚨 Conservative Exa search for ${modelType} reasoning model: strategy="${strategy}", maxResults=${limitedResults}, quality="${quality}", topic="${topic}", queries=${limitedQueries.length}`);
                       
                       // Map timePeriod to topic if provided (backward compatibility)
                       let effectiveTopic = topic;
@@ -213,7 +235,8 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
                       
                       for (const query of limitedQueries) {
                         try {
-                          console.log(`🔍 Conservative Exa searching with reasoning model: ${query}`);
+                          const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning';
+                          console.log(`🔍 Conservative Exa searching with ${modelType} model: ${query}`);
                           const searchResponse = await performExaSearch(query, limitedResults, effectiveTopic, quality);
                           
                           if (searchResponse.results && searchResponse.results.length > 0) {
@@ -248,7 +271,7 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
                         topic: effectiveTopic,
                         timePeriod: timePeriod,
                         results: allResults,
-                        summary: `Conservative search with reasoning model: ${strategy} strategy, ${limitedResults} results/query, ${quality} quality, ${effectiveTopic} topic, ${limitedQueries.length} queries. Found ${allResults.length} total results.`
+                        summary: `Conservative search with ${modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning'} model: ${strategy} strategy, ${limitedResults} results/query, ${quality} quality, ${effectiveTopic} topic, ${limitedQueries.length} queries. Found ${allResults.length} total results.`
                       };
                     },
                   }) : aggressiveWebSearchTool
@@ -397,7 +420,6 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
           }
           
           console.log(`🔍 Text stream content length: ${finalContent.length}, contains tool calls: ${finalContent.includes('<tool_use>') || finalContent.includes('tool_calls')}`);
-          console.log(`🔍 Text stream preview (first 300 chars): ${finalContent.substring(0, 300)}...`);
           
           // If text stream is empty or only contains tool calls, get the final response from the result
           if (!finalContent || finalContent.trim().length === 0 || finalContent.includes('<tool_use>') || finalContent.includes('tool_calls')) {
@@ -413,24 +435,8 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
             const assistantMessages = finalMessages.filter((msg: any) => msg.role === 'assistant');
             console.log(`🔍 Assistant messages count: ${assistantMessages.length}`);
             
-            // For reasoning models, we need the LAST assistant message (final answer), not the first one
-            // Skip any messages that are just reasoning/tool calls
-            const responseMessages = assistantMessages.filter((msg: any) => {
-              if (!msg.content) return false;
-              const content = typeof msg.content === 'string' ? msg.content : 
-                Array.isArray(msg.content) ? msg.content.map(p => p.text || p.content || '').join('') : '';
-              
-              // Skip messages that are just reasoning steps or tool calls
-              return content.length > 50 && 
-                     !content.startsWith('I need to') && 
-                     !content.startsWith('Let me search') && 
-                     !content.includes('<tool_use>') &&
-                     !content.match(/^(Step \d+:|We need to)/);
-            });
-            
-            console.log(`🔍 Filtered response messages count: ${responseMessages.length}`);
-            const lastAssistantMessage = responseMessages.pop() || assistantMessages.pop();
-            console.log(`🔍 Selected assistant message:`, lastAssistantMessage ? 'exists' : 'null');
+            const lastAssistantMessage = assistantMessages.pop();
+            console.log(`🔍 Last assistant message:`, lastAssistantMessage ? 'exists' : 'null');
             
             if (lastAssistantMessage?.content) {
               console.log(`🔍 Last assistant message content type:`, typeof lastAssistantMessage.content);
@@ -441,73 +447,24 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
                 console.log(`✅ Extracted string content: ${finalContent.substring(0, 100)}...`);
               } else if (Array.isArray(lastAssistantMessage.content)) {
                 // Extract text from content parts
-                console.log(`🔍 Content array structure:`, JSON.stringify(lastAssistantMessage.content, null, 2));
                 const textParts = lastAssistantMessage.content
                   .filter((part: any) => part.type === 'text')
                   .map((part: any) => part.text)
                   .join('');
-                console.log(`🔍 Filtered text parts length: ${textParts.length}`);
-                console.log(`🔍 Raw text parts preview: ${textParts.substring(0, 200)}...`);
-                
-                // If no text parts found, try to extract any string content
-                if (!textParts || textParts.trim().length === 0) {
-                  console.log(`⚠️ No text parts found, trying to extract any string content...`);
-                  const anyText = lastAssistantMessage.content
-                    .map((part: any) => {
-                      if (typeof part === 'string') return part;
-                      if (part.text) return part.text;
-                      if (part.content) return part.content;
-                      return '';
-                    })
-                    .join('');
-                  finalContent = anyText;
-                  console.log(`🔍 Alternative extraction result: ${anyText.substring(0, 200)}...`);
-                } else {
-                  finalContent = textParts;
-                }
-                
-                console.log(`✅ Final extracted content length: ${finalContent.length}`);
-                if (finalContent.length > 0) {
-                  console.log(`✅ Extracted array content: ${finalContent.substring(0, 100)}...`);
-                }
+                finalContent = textParts;
+                console.log(`✅ Extracted array content: ${finalContent.substring(0, 100)}...`);
               } else {
                 console.log(`⚠️ Unknown content type, using fallback`);
                 finalContent = 'I have processed your request and gathered the information you needed.';
               }
             } else {
-              console.log(`⚠️ No assistant message content found, trying result.text extraction`);
+              console.log(`⚠️ No assistant message content found, checking for text property`);
               
-              // Try to get the final text from result.text which should have the complete response
+              // Try alternative extraction methods
               try {
                 const fullText = await result.text;
-                console.log(`🔍 Result.text length: ${fullText?.length || 0}`);
-                console.log(`🔍 Result.text preview: ${fullText?.substring(0, 200) || 'empty'}...`);
-                
                 if (fullText && fullText.trim().length > 0) {
-                  // For reasoning models, the final response might be mixed with reasoning
-                  // Try to extract just the substantive answer content
-                  let cleanedText = fullText;
-                  
-                  // If it starts with reasoning patterns, try to find the actual answer
-                  if (fullText.includes('We need to answer') || fullText.includes('Step 1:') || fullText.includes('Let me search')) {
-                    // Try to find content after the last reasoning step or tool use
-                    const patterns = [
-                      /(?:Step \d+:.*?)?(?:Based on (?:my search|the research papers)|According to (?:the|recent)|The (?:research|papers|studies) (?:show|indicate|reveal)|Recent (?:studies|research|developments))/s,
-                      /(?:Here (?:are|is)|From (?:the|my) (?:search|papers)|The (?:key|main|latest) (?:findings|developments))/s,
-                      /(?:Analysis of|Summary of|Key findings)/s
-                    ];
-                    
-                    for (const pattern of patterns) {
-                      const match = fullText.match(pattern);
-                      if (match && match.index !== undefined) {
-                        cleanedText = fullText.substring(match.index);
-                        console.log(`🔧 Extracted answer from pattern match: ${cleanedText.substring(0, 100)}...`);
-                        break;
-                      }
-                    }
-                  }
-                  
-                  finalContent = cleanedText;
+                  finalContent = fullText;
                   console.log(`✅ Extracted from result.text: ${finalContent.substring(0, 100)}...`);
                 } else {
                   console.log(`⚠️ No content found anywhere, using fallback`);
