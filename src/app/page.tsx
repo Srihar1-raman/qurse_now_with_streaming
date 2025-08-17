@@ -11,7 +11,7 @@ import { MODEL_GROUPS, isReasoningModel } from '@/lib/ai-service';
 
 export default function Home() {
   const [inputValue, setInputValue] = useState('');
-  const [selectedModel, setSelectedModel] = useState('Deepseek R1 Distill 70B');
+  const [selectedModel, setSelectedModel] = useState('GPT-OSS 120B');
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
@@ -26,8 +26,18 @@ export default function Home() {
   // Web search options
   const webSearchOptions = [
     { name: 'Chat', enabled: false },
-    { name: 'Exa', enabled: true }
+    { name: 'Web Search (Exa)', enabled: true },
+    { name: 'arXiv', enabled: false }
   ];
+
+  // Initialize web search enabled based on selected option
+  useEffect(() => {
+    if (selectedWebSearchOption === 'Web Search (Exa)' || selectedWebSearchOption === 'arXiv') {
+      setWebSearchEnabled(true);
+    } else {
+      setWebSearchEnabled(false);
+    }
+  }, [selectedWebSearchOption]);
 
   // Get all available models from enabled groups
   const getAvailableModels = () => {
@@ -49,10 +59,38 @@ export default function Home() {
 
   const availableModels = getAvailableModels();
 
+  // Helper function to check if model is compatible with arxiv mode
+  const isModelCompatibleWithArxiv = (modelName: string, provider: string) => {
+    // For arxiv mode, only allow specific models
+    if (selectedWebSearchOption === 'arXiv') {
+      const compatibleModels = [
+        'GPT-OSS 120B',
+        'GPT-OSS 20B',
+        'Qwen3 32B',
+        'Deepseek R1 Distill 70B',
+        'Llama 4 Scout 17B',
+        'Kimi K2 Instruct'
+      ];
+      
+      const compatibleProviders = ['XAI', 'OpenAI', 'Anthropic'];
+      
+      return compatibleModels.includes(modelName) || compatibleProviders.includes(provider);
+    }
+    return true; // All models allowed for non-arxiv modes
+  };
+
   // Filter models based on search query
   const getFilteredModelGroups = () => {
     if (!modelSearchQuery.trim()) {
-      return Object.values(MODEL_GROUPS).filter(group => group.enabled);
+      return Object.values(MODEL_GROUPS)
+        .filter(group => group.enabled)
+        .map(group => ({
+          ...group,
+          models: group.models.map(model => ({
+            ...model,
+            disabled: !isModelCompatibleWithArxiv(model.name, group.provider)
+          }))
+        }));
     }
 
     const query = modelSearchQuery.toLowerCase();
@@ -60,10 +98,15 @@ export default function Home() {
       .filter(group => group.enabled)
       .map(group => ({
         ...group,
-        models: group.models.filter(model => 
-          model.name.toLowerCase().includes(query) ||
-          group.provider.toLowerCase().includes(query)
-        )
+        models: group.models
+          .filter(model => 
+            model.name.toLowerCase().includes(query) ||
+            group.provider.toLowerCase().includes(query)
+          )
+          .map(model => ({
+            ...model,
+            disabled: !isModelCompatibleWithArxiv(model.name, group.provider)
+          }))
       }))
       .filter(group => group.models.length > 0);
   };
@@ -137,10 +180,16 @@ export default function Home() {
       // Navigate to conversation page with the message, selected model, and web search state
       const encodedMessage = encodeURIComponent(inputValue.trim());
       const encodedModel = encodeURIComponent(selectedModel);
-      const webSearchParam = webSearchEnabled ? '&webSearch=true' : '';
+      
+      let searchParam = '';
+      if (selectedWebSearchOption === 'Web Search (Exa)') {
+        searchParam = '&webSearch=true';
+      } else if (selectedWebSearchOption === 'arXiv') {
+        searchParam = '&webSearch=true&arxivMode=true';
+      }
       
       // Use router.push but ensure proper parameter handling
-      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}${webSearchParam}`;
+      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}${searchParam}`;
       console.log('Navigating to:', url);
       router.push(url);
     }
@@ -153,7 +202,22 @@ export default function Home() {
   };
 
   const handleDeepSearch = () => {
-    // Implementation for deep search
+    if (inputValue.trim()) {
+      // Navigate to conversation page with the message, selected model, and appropriate search mode
+      const encodedMessage = encodeURIComponent(inputValue.trim());
+      const encodedModel = encodeURIComponent(selectedModel);
+      
+      let searchParam = '';
+      if (selectedWebSearchOption === 'Web Search (Exa)') {
+        searchParam = '&webSearch=true';
+      } else if (selectedWebSearchOption === 'arXiv') {
+        searchParam = '&webSearch=true&arxivMode=true';
+      }
+      
+      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}${searchParam}`;
+      console.log('Navigating to deep search:', url);
+      router.push(url);
+    }
   };
 
   const handleInternetSearch = () => {
@@ -388,11 +452,13 @@ export default function Home() {
                         <div
                           key={model.name}
                           onClick={() => {
-                            setSelectedModel(model.name);
-                            setIsModelDropdownOpen(false);
-                            setModelSearchQuery('');
+                            if (!model.disabled) {
+                              setSelectedModel(model.name);
+                              setIsModelDropdownOpen(false);
+                              setModelSearchQuery('');
+                            }
                           }}
-                          className={`model-item-enhanced ${selectedModel === model.name ? 'active' : ''}`}
+                          className={`model-item-enhanced ${selectedModel === model.name ? 'active' : ''} ${model.disabled ? 'disabled' : ''}`}
                         >
                           <span className="model-name">{model.name}</span>
                           <div className="model-badges">
@@ -429,7 +495,7 @@ export default function Home() {
             className="control-btn"
           >
             <Image src={getIconSrc("deep_search")} alt="Deep Search" width={14} height={14} className="icon-sm" />
-            <span>Deep search</span>
+            <span>Deep Search</span>
           </button>
 
           {/* Web Search Dropdown */}
@@ -441,7 +507,8 @@ export default function Home() {
               <Image 
                 src={getIconSrc(
                   selectedWebSearchOption === 'Chat' ? 'chat' : 
-                  selectedWebSearchOption === 'Exa' ? 'exa' : 
+                  selectedWebSearchOption === 'Web Search (Exa)' ? 'exa' : 
+                  selectedWebSearchOption === 'arXiv' ? 'arxiv-logo' : 
                   'internet', 
                   isWebSearchDropdownOpen
                 )} 
@@ -474,7 +541,12 @@ export default function Home() {
                         key={option.name}
                         onClick={() => {
                           setSelectedWebSearchOption(option.name);
-                          setWebSearchEnabled(option.enabled);
+                          // Update web search enabled based on selection
+                          if (option.name === 'Chat') {
+                            setWebSearchEnabled(false);
+                          } else if (option.name === 'Web Search (Exa)' || option.name === 'arXiv') {
+                            setWebSearchEnabled(true);
+                          }
                           setIsWebSearchDropdownOpen(false);
                         }}
                         className={`model-item-enhanced ${selectedWebSearchOption === option.name ? 'active' : ''}`}
@@ -486,9 +558,14 @@ export default function Home() {
                               <Image src={getIconSrc("chat", selectedWebSearchOption === option.name)} alt="Chat" width={12} height={12} className="badge-icon" />
                             </span>
                           )}
-                          {option.name === 'Exa' && (
+                          {option.name === 'Web Search (Exa)' && (
                             <span className="image-badge">
                               <Image src={getIconSrc("exa", selectedWebSearchOption === option.name)} alt="Exa" width={12} height={12} className="badge-icon" />
+                            </span>
+                          )}
+                          {option.name === 'arXiv' && (
+                            <span className="image-badge">
+                              <Image src={getIconSrc("arxiv-logo", selectedWebSearchOption === option.name)} alt="arXiv" width={12} height={12} className="badge-icon" />
                             </span>
                           )}
                         </div>

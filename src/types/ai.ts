@@ -51,6 +51,7 @@ export interface ToolCallOptions {
   maxTokens?: number;
   temperature?: number;
   webSearchEnabled?: boolean;
+  arxivMode?: boolean;
   customInstructions?: string | null;
   latitude?: number | null;
   longitude?: number | null;

@@ -58,7 +58,9 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
     shouldParseReasoning,
     contentLength: content?.length,
     rawResponseKeys: rawResponse ? Object.keys(rawResponse) : 'undefined',
-    hasReasoningProp: !!reasoning
+    hasReasoningProp: !!reasoning,
+    reasoningKeys: reasoning ? Object.keys(reasoning) : 'undefined',
+    reasoningCombinedLength: reasoning?.combinedReasoning?.length || 0
   });
   
   // If we have captured reasoning data, use it directly

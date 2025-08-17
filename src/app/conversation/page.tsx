@@ -42,7 +42,7 @@ function ConversationContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const lastSubmitTimeRef = useRef(0);
-  const [selectedModel, setSelectedModel] = useState('Deepseek R1 Distill 70B');
+  const [selectedModel, setSelectedModel] = useState('GPT-OSS 120B');
   const [modelInitialized, setModelInitialized] = useState(false);
   const [isInputModelDropdownOpen, setIsInputModelDropdownOpen] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
@@ -72,8 +72,31 @@ function ConversationContent() {
   // Web search options
   const webSearchOptions = [
     { name: 'Chat', enabled: false },
-    { name: 'Exa', enabled: true }
+    { name: 'Web Search (Exa)', enabled: true },
+    { name: 'arXiv', enabled: false }
   ];
+
+  // Update web search enabled based on selected option
+  useEffect(() => {
+    if (selectedWebSearchOption === 'Chat') {
+      setWebSearchEnabled(false);
+    } else if (selectedWebSearchOption === 'Web Search (Exa)') {
+      setWebSearchEnabled(true);
+    } else if (selectedWebSearchOption === 'arXiv') {
+      setWebSearchEnabled(true);
+    }
+  }, [selectedWebSearchOption]);
+
+  // Initialize web search enabled based on selected option
+  useEffect(() => {
+    if (selectedWebSearchOption === 'Web Search (Exa)') {
+      setWebSearchEnabled(true);
+    } else if (selectedWebSearchOption === 'arXiv') {
+      setWebSearchEnabled(true);
+    } else {
+      setWebSearchEnabled(false);
+    }
+  }, []);
 
   // Check if AI response suggests switching to web mode
   const checkForWebModeSuggestion = (aiResponse: string) => {
@@ -114,10 +137,38 @@ function ConversationContent() {
 
   const availableModels = getAvailableModels();
 
+  // Helper function to check if model is compatible with arxiv mode
+  const isModelCompatibleWithArxiv = (modelName: string, provider: string) => {
+    // For arxiv mode, only allow specific models
+    if (selectedWebSearchOption === 'arXiv') {
+      const compatibleModels = [
+        'GPT-OSS 120B',
+        'GPT-OSS 20B',
+        'Qwen3 32B',
+        'Deepseek R1 Distill 70B',
+        'Llama 4 Scout 17B',
+        'Kimi K2 Instruct'
+      ];
+      
+      const compatibleProviders = ['XAI', 'OpenAI', 'Anthropic'];
+      
+      return compatibleModels.includes(modelName) || compatibleProviders.includes(provider);
+    }
+    return true; // All models allowed for non-arxiv modes
+  };
+
   // Filter models based on search query
   const getFilteredModelGroups = () => {
     if (!modelSearchQuery.trim()) {
-      return Object.values(MODEL_GROUPS).filter(group => group.enabled);
+      return Object.values(MODEL_GROUPS)
+        .filter(group => group.enabled)
+        .map(group => ({
+          ...group,
+          models: group.models.map(model => ({
+            ...model,
+            disabled: !isModelCompatibleWithArxiv(model.name, group.provider)
+          }))
+        }));
     }
 
     const query = modelSearchQuery.toLowerCase();
@@ -125,10 +176,15 @@ function ConversationContent() {
       .filter(group => group.enabled)
       .map(group => ({
         ...group,
-        models: group.models.filter(model => 
-          model.name.toLowerCase().includes(query) ||
-          group.provider.toLowerCase().includes(query)
-        )
+        models: group.models
+          .filter(model => 
+            model.name.toLowerCase().includes(query) ||
+            group.provider.toLowerCase().includes(query)
+          )
+          .map(model => ({
+            ...model,
+            disabled: !isModelCompatibleWithArxiv(model.name, group.provider)
+          }))
       }))
       .filter(group => group.models.length > 0);
   };
@@ -252,8 +308,9 @@ function ConversationContent() {
     const initialModel = searchParams.get('model');
     const conversationId = searchParams.get('id');
     const webSearchParam = searchParams.get('webSearch');
+    const arxivModeParam = searchParams.get('arxivMode');
     
-    console.log('🔍 URL Parameters received:', { initialMessage, initialModel, conversationId, webSearchParam });
+    console.log('🔍 URL Parameters received:', { initialMessage, initialModel, conversationId, webSearchParam, arxivModeParam });
     
     // Reset modelInitialized for each URL change to ensure proper re-initialization
     setModelInitialized(false);
@@ -278,9 +335,19 @@ function ConversationContent() {
     // Always mark as initialized after processing (whether model was set or not)
     setModelInitialized(true);
     
-    // Set web search state from URL parameter
-    if (webSearchParam === 'true') {
+    // Set web search state from URL parameters
+    if (arxivModeParam === 'true') {
       setWebSearchEnabled(true);
+      setSelectedWebSearchOption('arXiv');
+      console.log('Setting web search to arXiv mode from URL parameter');
+    } else if (webSearchParam === 'true') {
+      setWebSearchEnabled(true);
+      setSelectedWebSearchOption('Web Search (Exa)'); // Set to Exa when web search is enabled from URL
+      console.log('Setting web search to Exa mode from URL parameter');
+    } else {
+      // Ensure we're in Chat mode when no web search
+      setWebSearchEnabled(false);
+      setSelectedWebSearchOption('Chat');
     }
     
     // Only proceed if auth loading is complete
@@ -315,8 +382,18 @@ function ConversationContent() {
     if (typeof window !== 'undefined' && !webSearchInitializedRef.current) {
       const urlParams = new URLSearchParams(window.location.search);
       const webSearchParam = urlParams.get('webSearch');
-      if (webSearchParam === 'true') {
+      const arxivModeParam = urlParams.get('arxivMode');
+      
+      if (arxivModeParam === 'true') {
         setWebSearchEnabled(true);
+        setSelectedWebSearchOption('arXiv');
+        webSearchInitializedRef.current = true;
+      } else if (webSearchParam === 'true') {
+        setWebSearchEnabled(true);
+        setSelectedWebSearchOption('Web Search (Exa)');
+        webSearchInitializedRef.current = true;
+      } else {
+        setSelectedWebSearchOption('Chat');
         webSearchInitializedRef.current = true;
       }
     }
@@ -359,7 +436,9 @@ function ConversationContent() {
               isUser: msg.role === 'user',
               timestamp: msg.created_at,
               model: msg.metadata?.model_used, // Load model from metadata
-              sources: msg.metadata?.sources || [] // Load sources from metadata
+              sources: msg.metadata?.sources || [], // Load sources from metadata
+              reasoning: msg.metadata?.reasoning, // Load reasoning data
+              rawResponse: msg.metadata?.rawResponse // Load raw response data
             };
             
             // Debug: Log sources loading
@@ -486,7 +565,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
             messages: aiMessages,
             maxTokens: 8192,
             temperature: 0.7,
-            webSearchEnabled: webSearchEnabled
+            webSearchEnabled: webSearchEnabled,
+            arxivMode: selectedWebSearchOption === 'arXiv'
           })
         });
 
@@ -521,7 +601,36 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
         
         // Store sources for later use (don't auto-open sidebar)
         if (result.sources && result.sources.length > 0) {
-          setCurrentSources(result.sources);
+          // Format sources based on the selected mode
+          let formattedSources = result.sources;
+          
+          if (selectedWebSearchOption === 'arXiv') {
+            // Format arXiv sources for the sources sidebar
+            formattedSources = result.sources.map((source: any) => ({
+              title: source.title || source.title || 'Unknown Paper',
+              relevance_score: source.relevance_score || 1,
+              domain: 'arxiv.org',
+              url: source.url || source.url || '#',
+              favicon: '/icon/arxiv-logo.svg',
+              // Add arXiv-specific metadata
+              arxiv_id: source.arxiv_id,
+              authors: source.authors,
+              abstract: source.abstract,
+              submission_date: source.submission_date,
+              pdf_url: source.pdf_url
+            }));
+          } else {
+            // Format web search sources (existing logic)
+            formattedSources = result.sources.map((source: any) => ({
+              title: source.title || source.title || 'Unknown Title',
+              relevance_score: source.relevance_score || 1,
+              domain: source.domain || 'unknown',
+              url: source.url || source.url || '#',
+              favicon: source.favicon || `https://www.google.com/s2/favicons?domain=${source.url}&sz=32`
+            }));
+          }
+          
+          setCurrentSources(formattedSources);
         }
         
         // Check if AI suggests switching to web mode
@@ -584,7 +693,9 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
               model: selectedModel,
               metadata: { 
                 model_used: selectedModel,
-                sources: aiResponse.sources || [] // Save sources to metadata
+                sources: aiResponse.sources || [], // Save sources to metadata
+                reasoning: aiResponse.reasoning, // Save reasoning data
+                rawResponse: aiResponse.rawResponse // Save raw response data
               }
             })
           });
@@ -1075,11 +1186,13 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                               <div
                                 key={model.name}
                                 onClick={() => {
-                                  setSelectedModel(model.name);
-                                  setIsInputModelDropdownOpen(false);
-                                  setModelSearchQuery('');
+                                  if (!model.disabled) {
+                                    setSelectedModel(model.name);
+                                    setIsInputModelDropdownOpen(false);
+                                    setModelSearchQuery('');
+                                  }
                                 }}
-                                className={`model-item-enhanced model-item-small ${selectedModel === model.name ? 'active' : ''}`}
+                                className={`model-item-enhanced model-item-small ${selectedModel === model.name ? 'active' : ''} ${model.disabled ? 'disabled' : ''}`}
                               >
                                 <span className="model-name">{model.name}</span>
                                 <div className="model-badges">
@@ -1121,7 +1234,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                     <Image 
                       src={getIconSrc(
                         selectedWebSearchOption === 'Chat' ? 'chat' : 
-                        selectedWebSearchOption === 'Exa' ? 'exa' : 
+                        selectedWebSearchOption === 'Web Search (Exa)' ? 'exa' : 
+                        selectedWebSearchOption === 'arXiv' ? 'arxiv-logo' : 
                         'internet', 
                         isWebSearchDropdownOpen
                       )} 
@@ -1146,9 +1260,14 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                               key={option.name}
                               onClick={() => {
                                 setSelectedWebSearchOption(option.name);
-                                setWebSearchEnabled(option.enabled);
+                                // Update web search enabled based on selection
+                                if (option.name === 'Chat') {
+                                  setWebSearchEnabled(false);
+                                } else if (option.name === 'Web Search (Exa)' || option.name === 'arXiv') {
+                                  setWebSearchEnabled(true);
+                                }
                                 // Hide web mode suggestion if user manually switches to web mode
-                                if (option.enabled) {
+                                if (option.name !== 'Chat') {
                                   setShowWebModeSuggestion(false);
                                 }
                                 setIsWebSearchDropdownOpen(false);
@@ -1162,9 +1281,14 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                                      <Image src={getIconSrc("chat", selectedWebSearchOption === option.name)} alt="Chat" width={10} height={10} className="badge-icon" />
                                    </span>
                                  )}
-                                 {option.name === 'Exa' && (
+                                 {option.name === 'Web Search (Exa)' && (
                                    <span className="image-badge">
                                      <Image src={getIconSrc("exa", selectedWebSearchOption === option.name)} alt="Exa" width={10} height={10} className="badge-icon" />
+                                   </span>
+                                 )}
+                                 {option.name === 'arXiv' && (
+                                   <span className="image-badge">
+                                     <Image src={getIconSrc("arxiv-logo", selectedWebSearchOption === option.name)} alt="arXiv" width={10} height={10} className="badge-icon" />
                                    </span>
                                  )}
                               </div>

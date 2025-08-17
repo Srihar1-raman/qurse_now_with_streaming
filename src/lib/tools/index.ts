@@ -2,6 +2,7 @@
 export { aggressiveWebSearchTool } from '../web-search-tools';
 export { weatherTool } from './weather';
 export { locationDetectorTool } from './location-detector';
+export { arxivTool } from './arxiv';
 
 // Add more tool exports here as you create them:
 // export { calculatorTool } from './calculator';

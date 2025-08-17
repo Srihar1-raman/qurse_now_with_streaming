@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
       temperature, 
       stream = false, 
       webSearchEnabled = false,
+      arxivMode = false,
       customInstructions = null,
       latitude = null,
       longitude = null
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest) {
       model,
       messagesCount: messages?.length,
       webSearchEnabled,
+      arxivMode,
       stream
     });
     
@@ -84,6 +86,7 @@ export async function POST(request: NextRequest) {
         maxTokens,
         temperature,
         webSearchEnabled,
+        arxivMode,
         customInstructions,
         latitude,
         longitude

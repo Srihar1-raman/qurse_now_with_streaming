@@ -1,6 +1,6 @@
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
-import { aggressiveWebSearchTool, weatherTool, locationDetectorTool } from '../tools';
+import { aggressiveWebSearchTool, weatherTool, locationDetectorTool, arxivTool } from '../tools';
 import { performExaSearch } from '../exa-service';
 import { getModelInfo, isReasoningModel } from './models';
 import { customProviderWithTools } from './providers';
@@ -13,16 +13,12 @@ import { ToolCallOptions } from '@/types/ai';
  * This module provides advanced tool calling capabilities for reasoning models including:
  * - DeepSeek R1 Distill 70B (Groq)
  * - Qwen3 32B (Groq) 
- * - GPT-OSS 120B & 20B (Groq) - Enhanced reasoning models with tool calls
+ * - GPT-OSS 120B & 20B (Groq)
  * - Grok 3 Mini & Grok 4 (XAI)
  * - O4 Mini & GPT-4.1 (OpenAI)
  * - Claude Sonnet 4 (Anthropic)
  * 
- * GPT-OSS models are specifically configured as reasoning models with:
- * - Conservative token management (2 messages, 2048 max tokens)
- * - Reasoning middleware for step-by-step thinking
- * - Enhanced provider options (parallelToolCalls: false, reasoningSummary: detailed)
- * - Aggressive web search with minimal queries for efficiency
+ * All GROQ models use standard token management and configuration.
  */
 
 // Generate AI response with tool calling for web search
@@ -32,6 +28,7 @@ export async function generateAITextWithTools({
   maxTokens = 8192,
   temperature = 0.7,
   webSearchEnabled = false,
+  arxivMode = false,
   customInstructions = null,
   latitude = null,
   longitude = null,
@@ -41,8 +38,7 @@ export async function generateAITextWithTools({
       model,
       webSearchEnabled,
       messagesCount: messages.length,
-      lastMessage: messages[messages.length - 1]?.content,
-      isGPTOSS: model.includes('gpt-oss')
+      lastMessage: messages[messages.length - 1]?.content
     });
 
     const modelInfo = getModelInfo(model);
@@ -54,8 +50,7 @@ export async function generateAITextWithTools({
       name: modelInfo.name,
       provider: modelInfo.provider,
       reasoningModel: modelInfo.reasoningModel,
-      isGPTOSS: modelInfo.id.includes('gpt-oss'),
-      modelType: modelInfo.id.includes('gpt-oss') ? 'GPT-OSS Reasoning Model' : (modelInfo.reasoningModel ? 'Reasoning Model' : 'Standard Model')
+      modelType: modelInfo.reasoningModel ? 'Reasoning Model' : 'Standard Model'
     });
 
     // Skip web search if not enabled
@@ -69,91 +64,80 @@ export async function generateAITextWithTools({
       });
     }
 
-    // For models that support tools, use Scira-style tool calling
+    // For models that support tools, use tool calling
     if (webSearchEnabled && typeof window === 'undefined' && modelInfo.supportsTools && customProviderWithTools) {
-      const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Standard';
-      console.log(`🚀 Using Scira-style tool calling for ${modelType} ${modelInfo.name} (${modelInfo.provider})`);
+      console.log(`🚀 Using websearch tool calling for ${modelInfo.name} (${modelInfo.provider})`);
       
       // Get the user's query from the last user message
       const userQuery = messages.filter(m => m.role === 'user').pop()?.content || '';
       
       if (userQuery.trim()) {
-        const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Standard';
-        console.log(`🔍 Aggressive web search enabled for ${modelType} model: ${userQuery}`);
+        console.log(`🔍 Web search enabled for model: ${userQuery}`);
         
         // Enhanced token management for Groq models
         let truncatedMessages = messages;
         let maxTokensForModel = maxTokens;
-        let isTokenLimitedModel = false;
         
         if (modelInfo.provider === 'groq') {
-          // Check if it's a reasoning model (Deepseek, Qwen, GPT-OSS) vs regular tool-calling model
-          const reasoningModels = ['deepseek-r1-distill-llama-70b', 'qwen/qwen3-32b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
-          isTokenLimitedModel = reasoningModels.includes(modelInfo.id);
-          
-          if (isTokenLimitedModel) {
-            // Conservative settings for reasoning models (DeepSeek, Qwen, GPT-OSS) - they need more context
-            truncatedMessages = messages.slice(-2); // Keep only last 2 messages
-            maxTokensForModel = 2048; // Moderate token limit
-            const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning';
-            console.log(`🧠 Conservative token management for ${modelType} reasoning model ${model}: ${messages.length} → ${truncatedMessages.length} messages, maxTokens: ${maxTokensForModel}`);
-          } else {
-            // Standard settings for regular tool-calling models
-            truncatedMessages = messages.slice(-3); // Keep only last 3 messages
-            maxTokensForModel = 2048; // Standard token limit
-            console.log(`🔧 Standard token management for tool-calling model ${model}: ${messages.length} → ${truncatedMessages.length} messages, maxTokens: ${maxTokensForModel}`);
-          }
+          // Standard settings for all GROQ models
+          truncatedMessages = messages.slice(-3); // Keep only last 3 messages
+          maxTokensForModel = 2048; // Standard token limit for all GROQ models
+          console.log(`🔧 Standard token management for GROQ model ${model}: ${messages.length} → ${truncatedMessages.length} messages, maxTokens: ${maxTokensForModel}`);
         }
 
-        // Scira-style system instructions that force tool usage
-        const systemInstructions = `
+        // System instructions based on mode
+        const systemInstructions = arxivMode ? `
+You are an AI research assistant called Qurse, designed to help users find academic research papers on arXiv and answer their questions using the content from those papers.
+
+CRITICAL INSTRUCTIONS FOR ARXIV MODE:
+1. When you use the arxiv_search tool, you MUST analyze the paper abstracts and content
+2. You MUST provide a detailed, comprehensive answer using the information from the papers
+3. NEVER just say "Response generated successfully" - always provide substantive content
+4. If a user asks for detailed explanation of a paper, you MUST extract and explain the key points from that paper's abstract and content
+5. Synthesize insights from multiple papers when relevant
+6. Provide specific details, methodologies, findings, and conclusions from the papers
+
+RESPONSE REQUIREMENTS:
+- Start with a comprehensive answer to the user's question
+- Use information from the paper abstracts and content
+- Explain key methodologies, findings, and implications
+- If explaining a specific paper, break down its contributions, methodology, and results
+- End with a list of the key papers that support your answer
+
+NEVER return empty responses or generic messages. Always provide detailed, substantive content based on the research papers found.
+` : `
 You are an AI web search engine called Qurse, designed to help users find information on the internet with no unnecessary chatter and more focus on the content and respond with markdown format and the response guidelines below.
 
 **CRITICAL INSTRUCTION:**
-- ⚠️ URGENT: RUN THE APPROPRIATE TOOL IMMEDIATELY when user sends ANY message - NO EXCEPTIONS
+- ⚠️ URGENT: RUN THE AGGRESSIVE WEB SEARCH TOOL IMMEDIATELY when user sends ANY message - NO EXCEPTIONS
 - ⚠️ URGENT: Always respond with markdown format!!
-- EVEN IF THE USER QUERY IS AMBIGUOUS OR UNCLEAR, YOU MUST STILL RUN THE TOOL IMMEDIATELY
+- EVEN IF THE USER QUERY IS AMBIGUOUS OR UNCLEAR, YOU MUST STILL RUN THE WEB SEARCH TOOL IMMEDIATELY
 - NEVER ask for clarification before running the tool - run first, clarify later if needed
-- If a query is ambiguous, make your best interpretation and run the appropriate tool right away
+- If a query is ambiguous, make your best interpretation and run the web search tool right away
 - After getting results, you can then address any ambiguity in your response
 - DO NOT begin responses with statements like "I'm assuming you're looking for information about X"
 - NEVER preface your answer with your interpretation of the user's query
-- GO STRAIGHT TO ANSWERING the question after running the tool
+- GO STRAIGHT TO ANSWERING the question after running the web search tool
 
-**IMPORTANT: After running tools, you MUST provide a complete, helpful response to the user's question. Do not stop after tool calls - always provide the final answer.**
+**IMPORTANT: After running the web search tool, you MUST provide a complete, helpful response to the user's question. Do not stop after tool calls - always provide the final answer.**
 
-**Tool-Specific Guidelines:**
-- A tool should only be called once per response cycle
-- Always mandatory to run the tool first before writing the response to ensure accuracy and relevance
-- After tool execution, provide a comprehensive answer based on the results
-
-**Multi Query Web Search:**
-${isTokenLimitedModel ? 
-  `- Use MODERATE queries to avoid token limits. Maximum 2 queries allowed, minimum 1 query required
-- Use "quick" strategy for faster, lighter searches
-- Use maxResults=3 to get better coverage while staying within limits
-- Keep queries short and focused
-- Use "general" topic type to avoid extra processing
-- As a reasoning model, think step-by-step about what information you need before searching` 
-  : 
-  `- Always try to make more than 3 queries to get the best results. Minimum 3 queries are required and maximum 6 queries are allowed
-- Specify the year or "latest" in queries to fetch recent information
-- Use the "news" topic type to get the latest news and updates
-- Use the "finance" topic type to get the latest financial news and updates
-- Always put the values in array format for the required parameters
-- Put the latest year in the queries to get the latest information or just "latest"`
-}
+**Web Search Tool Guidelines:**
+- Use the aggressive_web_search tool to find relevant information
+- Focus on the most recent and relevant results
+- Extract key information from multiple sources
+- Provide comprehensive answers based on the search results
 
 **Response Format:**
 - Always provide a complete, helpful response after tool execution
 - Use markdown formatting for better readability
 - Include relevant information from the search results
 - Be concise but informative
+- At the end, summarize the key findings from the sources
 
 Today's Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit', weekday: 'short' })}
 ${latitude && longitude ? `\nThe user's location is ${latitude}, ${longitude}.` : ''}
 ${customInstructions ? `\n\nThe user's custom instructions are as follows and YOU MUST FOLLOW THEM AT ALL COSTS: ${customInstructions}` : ''}
-`
+`;
 
         let capturedReasoning: any = null;
         let capturedSources: any[] = [];
@@ -174,7 +158,7 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
             temperature: temperature,
             maxSteps: modelInfo.reasoningModel ? 5 : 3, // More steps for reasoning models
             maxRetries: 10,
-            experimental_activeTools: ['aggressive_web_search', 'weather', 'location_detector'],
+            experimental_activeTools: arxivMode ? ['arxiv_search', 'weather', 'location_detector'] : ['aggressive_web_search', 'weather', 'location_detector'],
             system: systemInstructions,
           };
 
@@ -186,87 +170,89 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
                 reasoningSummary: 'detailed', // Enable detailed reasoning summary
               }
             };
-            console.log(`🧠 Enhanced configuration for ${modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Groq'} reasoning model: parallelToolCalls=false, reasoningSummary=detailed`);
+            console.log(`🧠 Enhanced configuration for GROQ reasoning model: parallelToolCalls=false, reasoningSummary=detailed`);
           }
           
           const result = await streamText({
             ...streamConfig,
             tools: {
-              aggressive_web_search: isTokenLimitedModel ? 
-                // Create a more conservative tool for reasoning models (DeepSeek, Qwen, GPT-OSS)
-                tool({
-                  description: 'Search the web for current information using Exa AI. Use this tool when you need to find recent news, facts, or updates to answer questions accurately. As a reasoning model, think step-by-step about what information you need, then search efficiently with minimal queries.',
-                  parameters: z.object({
-                    queries: z.array(z.string().describe('Array of search queries to perform (MAX 2 queries)')),
-                    strategy: z.enum(['quick', 'deep', 'breaking', 'expert', 'historical']).default('quick').describe('Search strategy to use (use quick for token-limited models)'),
-                    maxResults: z.number().min(1).max(3).default(3).describe('Maximum number of results per query (MAX 3 for token-limited models)'),
-                    quality: z.enum(['default', 'best']).default('default').describe('Search quality: default=faster, best=better quality'),
-                    topic: z.enum(['general', 'news', 'finance']).default('general').describe('Topic type: general, news, or finance'),
-                    timePeriod: z.enum(['1h', '1d', '1w', '1m', 'recent']).optional().describe('Time period for results (legacy parameter, mapped to topic)'),
-                    maxQueries: z.number().min(1).max(2).default(1).describe('Maximum number of queries to execute (MAX 2 for token-limited models)'),
-                  }),
-                  execute: async ({ queries, strategy, maxResults, quality, topic, timePeriod, maxQueries }) => {
-                    // Force moderate limits for token-limited models
-                    const limitedQueries = queries.slice(0, Math.min(maxQueries, 2));
-                    const limitedResults = Math.min(maxResults, 3);
-                    
-                    const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning';
-                    console.log(`🚨 Conservative Exa search for ${modelType} reasoning model: strategy="${strategy}", maxResults=${limitedResults}, quality="${quality}", topic="${topic}", queries=${limitedQueries.length}`);
-                    
-                    // Map timePeriod to topic if provided (backward compatibility)
-                    let effectiveTopic = topic;
-                    if (timePeriod) {
-                      if (timePeriod === 'recent' || timePeriod === '1h' || timePeriod === '1d') {
-                        effectiveTopic = 'news';
-                      } else if (timePeriod === '1w' || timePeriod === '1m') {
-                        effectiveTopic = 'general';
-                      }
-                    }
-                    
-                    const allResults: any[] = [];
-                    
-                    for (const query of limitedQueries) {
-                      try {
-                        const modelType = modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning';
-                        console.log(`🔍 Conservative Exa searching with ${modelType} model: ${query}`);
-                        const searchResponse = await performExaSearch(query, limitedResults, effectiveTopic, quality);
-                        
-                        if (searchResponse.results && searchResponse.results.length > 0) {
-                          const formattedResults = searchResponse.results.map((result: any, index) => ({
-                            query,
-                            source: `${index + 1}`,
-                            title: result.title,
-                            url: result.url,
-                            content: result.content,
-                            author: result.author,
-                            published_date: result.published_date,
-                            image: result.image
-                          }));
-                          
-                          allResults.push(...formattedResults);
+              ...(arxivMode ? {
+                arxiv_search: arxivTool
+              } : {
+                aggressive_web_search: modelInfo.reasoningModel ? 
+                  // Create a more conservative tool for reasoning models
+                  tool({
+                    description: 'Search the web for current information using Exa AI. Use this tool when you need to find recent news, facts, or updates to answer questions accurately. As a reasoning model, think step-by-step about what information you need, then search efficiently with minimal queries.',
+                    parameters: z.object({
+                      queries: z.array(z.string().describe('Array of search queries to perform (MAX 2 queries)')),
+                      strategy: z.enum(['quick', 'deep', 'breaking', 'expert', 'historical']).default('quick').describe('Search strategy to use (use quick for token-limited models)'),
+                      maxResults: z.number().min(1).max(3).default(3).describe('Maximum number of results per query (MAX 3 for token-limited models)'),
+                      quality: z.enum(['default', 'best']).default('default').describe('Search quality: default=faster, best=better quality'),
+                      topic: z.enum(['general', 'news', 'finance']).default('general').describe('Topic type: general, news, or finance'),
+                      timePeriod: z.enum(['1h', '1d', '1w', '1m', 'recent']).optional().describe('Time period for results (legacy parameter, mapped to topic)'),
+                      maxQueries: z.number().min(1).max(2).default(1).describe('Maximum number of queries to execute (MAX 2 for token-limited models)'),
+                    }),
+                    execute: async ({ queries, strategy, maxResults, quality, topic, timePeriod, maxQueries }) => {
+                      // Force moderate limits for token-limited models
+                      const limitedQueries = queries.slice(0, Math.min(maxQueries, 2));
+                      const limitedResults = Math.min(maxResults, 3);
+                      
+                      console.log(`🚨 Conservative Exa search for reasoning model: strategy="${strategy}", maxResults=${limitedResults}, quality="${quality}", topic="${topic}", queries=${limitedQueries.length}`);
+                      
+                      // Map timePeriod to topic if provided (backward compatibility)
+                      let effectiveTopic = topic;
+                      if (timePeriod) {
+                        if (timePeriod === 'recent' || timePeriod === '1h' || timePeriod === '1d') {
+                          effectiveTopic = 'news';
+                        } else if (timePeriod === '1w' || timePeriod === '1m') {
+                          effectiveTopic = 'general';
                         }
-                      } catch (error) {
-                        console.error(`Conservative Exa search failed for "${query}":`, error);
                       }
-                    }
-                    
-                    // Store the results globally so we can access them later
-                    console.log('🔍 Storing search results globally:', allResults);
-                    (global as any).lastSearchResults = allResults;
-                    
-                    return {
-                      totalQueries: limitedQueries.length,
-                      totalResults: allResults.length,
-                      strategy: strategy,
-                      maxResults: limitedResults,
-                      quality: quality,
-                      topic: effectiveTopic,
-                      timePeriod: timePeriod,
-                      results: allResults,
-                      summary: `Conservative search with ${modelInfo.id.includes('gpt-oss') ? 'GPT-OSS' : 'Reasoning'} model: ${strategy} strategy, ${limitedResults} results/query, ${quality} quality, ${effectiveTopic} topic, ${limitedQueries.length} queries. Found ${allResults.length} total results.`
-                    };
-                  },
-                }) : aggressiveWebSearchTool,
+                      
+                      const allResults: any[] = [];
+                      
+                      for (const query of limitedQueries) {
+                        try {
+                          console.log(`🔍 Conservative Exa searching with reasoning model: ${query}`);
+                          const searchResponse = await performExaSearch(query, limitedResults, effectiveTopic, quality);
+                          
+                          if (searchResponse.results && searchResponse.results.length > 0) {
+                            const formattedResults = searchResponse.results.map((result: any, index) => ({
+                              query,
+                              source: `${index + 1}`,
+                              title: result.title,
+                              url: result.url,
+                              content: result.content,
+                              author: result.author,
+                              published_date: result.published_date,
+                              image: result.image
+                            }));
+                            
+                            allResults.push(...formattedResults);
+                          }
+                        } catch (error) {
+                          console.error(`Conservative Exa search failed for "${query}":`, error);
+                        }
+                      }
+                      
+                      // Store the results globally so we can access them later
+                      console.log('🔍 Storing search results globally:', allResults);
+                      (global as any).lastSearchResults = allResults;
+                      
+                      return {
+                        totalQueries: limitedQueries.length,
+                        totalResults: allResults.length,
+                        strategy: strategy,
+                        maxResults: limitedResults,
+                        quality: quality,
+                        topic: effectiveTopic,
+                        timePeriod: timePeriod,
+                        results: allResults,
+                        summary: `Conservative search with reasoning model: ${strategy} strategy, ${limitedResults} results/query, ${quality} quality, ${effectiveTopic} topic, ${limitedQueries.length} queries. Found ${allResults.length} total results.`
+                      };
+                    },
+                  }) : aggressiveWebSearchTool
+              }),
               weather: weatherTool,
               location_detector: locationDetectorTool,
             },
@@ -290,25 +276,73 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
               console.log('Sources: ', event.sources);
               console.log('Usage: ', event.usage);
               
-              // Capture reasoning data from both steps
+              // Capture reasoning data from steps and event.reasoning
+              const allReasoning = [];
+              
+              // Get reasoning from event.reasoning first (if available)
+              if (event.reasoning && typeof event.reasoning === 'string' && event.reasoning.trim()) {
+                allReasoning.push(event.reasoning.trim());
+              }
+              
+              // Get reasoning from steps
               if (event.steps && event.steps.length > 0) {
+                event.steps.forEach((step, index) => {
+                  if (step.reasoning && typeof step.reasoning === 'string' && step.reasoning.trim()) {
+                    const stepReasoning = step.reasoning.trim();
+                    // Only add if it's not just "**Answer**" or similar short non-reasoning content
+                    if (stepReasoning.length > 20 && !stepReasoning.match(/^\*\*[A-Za-z]+\*\*$/)) {
+                      allReasoning.push(`Step ${index + 1}:\n${stepReasoning}`);
+                    }
+                  }
+                });
+              }
+              
+              if (allReasoning.length > 0) {
                 capturedReasoning = {
-                  step1Reasoning: event.steps[0]?.reasoning || '',
-                  step2Reasoning: event.steps[1]?.reasoning || '',
-                  combinedReasoning: event.steps.map(step => step.reasoning).filter(Boolean).join('\n\n---\n\n')
+                  step1Reasoning: event.steps?.[0]?.reasoning || '',
+                  step2Reasoning: event.steps?.[1]?.reasoning || '',
+                  combinedReasoning: allReasoning.join('\n\n---\n\n')
                 };
+                console.log('🧠 Captured reasoning data:', {
+                  totalSteps: allReasoning.length,
+                  reasoningLength: capturedReasoning.combinedReasoning.length
+                });
               }
               
               // First, try to get sources from globally stored search results
               if ((global as any).lastSearchResults && (global as any).lastSearchResults.length > 0) {
                 console.log('🔍 Found globally stored search results:', (global as any).lastSearchResults);
-                capturedSources = (global as any).lastSearchResults.map((result: any, index: number) => ({
-                  title: result.title,
-                  relevance_score: 1 - (index * 0.1), // Higher position = higher relevance
-                  domain: new URL(result.url).hostname.replace('www.', ''),
-                  url: result.url,
-                  favicon: `https://www.google.com/s2/favicons?domain=${result.url}&sz=32`
-                }));
+                
+                // Check if this is arXiv mode based on the first result
+                const isArxivResults = (global as any).lastSearchResults[0]?.arxiv_id || 
+                                     (global as any).lastSearchResults[0]?.url?.includes('arxiv.org');
+                
+                if (isArxivResults) {
+                  // Preserve arXiv-specific metadata for arXiv results
+                  capturedSources = (global as any).lastSearchResults.map((result: any, index: number) => ({
+                    title: result.title,
+                    relevance_score: result.relevance_score || (1 - (index * 0.1)),
+                    domain: 'arxiv.org',
+                    url: result.url,
+                    favicon: '/icon/arxiv-logo.svg',
+                    // Preserve arXiv-specific fields
+                    arxiv_id: result.arxiv_id,
+                    authors: result.author || result.authors,
+                    abstract: result.content || result.abstract,
+                    submission_date: result.published_date || result.submission_date,
+                    pdf_url: result.pdf_url
+                  }));
+                } else {
+                  // Standard web search results
+                  capturedSources = (global as any).lastSearchResults.map((result: any, index: number) => ({
+                    title: result.title,
+                    relevance_score: 1 - (index * 0.1), // Higher position = higher relevance
+                    domain: new URL(result.url).hostname.replace('www.', ''),
+                    url: result.url,
+                    favicon: `https://www.google.com/s2/favicons?domain=${result.url}&sz=32`
+                  }));
+                }
+                
                 console.log('✅ Captured sources from global search results:', capturedSources);
                 // Clear the global storage after use
                 (global as any).lastSearchResults = null;
@@ -362,35 +396,131 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
             finalContent += chunk;
           }
           
+          console.log(`🔍 Text stream content length: ${finalContent.length}, contains tool calls: ${finalContent.includes('<tool_use>') || finalContent.includes('tool_calls')}`);
+          console.log(`🔍 Text stream preview (first 300 chars): ${finalContent.substring(0, 300)}...`);
+          
           // If text stream is empty or only contains tool calls, get the final response from the result
-          if (!finalContent || finalContent.includes('<tool_use>') || finalContent.includes('tool_calls')) {
-            console.log(`🔍 Text stream contains tool calls, extracting final response from result...`);
+          if (!finalContent || finalContent.trim().length === 0 || finalContent.includes('<tool_use>') || finalContent.includes('tool_calls')) {
+            console.log(`🔍 Text stream empty or contains tool calls, extracting final response from result...`);
             
             // Get the final assistant message from the response
             const response = await result.response;
+            console.log(`🔍 Response object:`, response ? 'exists' : 'null');
+            
             const finalMessages = response?.messages || [];
-            const lastAssistantMessage = finalMessages
-              .filter((msg: any) => msg.role === 'assistant')
-              .pop();
+            console.log(`🔍 Final messages count: ${finalMessages.length}`);
+            
+            const assistantMessages = finalMessages.filter((msg: any) => msg.role === 'assistant');
+            console.log(`🔍 Assistant messages count: ${assistantMessages.length}`);
+            
+            // For reasoning models, we need the LAST assistant message (final answer), not the first one
+            // Skip any messages that are just reasoning/tool calls
+            const responseMessages = assistantMessages.filter((msg: any) => {
+              if (!msg.content) return false;
+              const content = typeof msg.content === 'string' ? msg.content : 
+                Array.isArray(msg.content) ? msg.content.map(p => p.text || p.content || '').join('') : '';
+              
+              // Skip messages that are just reasoning steps or tool calls
+              return content.length > 50 && 
+                     !content.startsWith('I need to') && 
+                     !content.startsWith('Let me search') && 
+                     !content.includes('<tool_use>') &&
+                     !content.match(/^(Step \d+:|We need to)/);
+            });
+            
+            console.log(`🔍 Filtered response messages count: ${responseMessages.length}`);
+            const lastAssistantMessage = responseMessages.pop() || assistantMessages.pop();
+            console.log(`🔍 Selected assistant message:`, lastAssistantMessage ? 'exists' : 'null');
             
             if (lastAssistantMessage?.content) {
+              console.log(`🔍 Last assistant message content type:`, typeof lastAssistantMessage.content);
+              
               // Handle different content types
               if (typeof lastAssistantMessage.content === 'string') {
                 finalContent = lastAssistantMessage.content;
+                console.log(`✅ Extracted string content: ${finalContent.substring(0, 100)}...`);
               } else if (Array.isArray(lastAssistantMessage.content)) {
                 // Extract text from content parts
+                console.log(`🔍 Content array structure:`, JSON.stringify(lastAssistantMessage.content, null, 2));
                 const textParts = lastAssistantMessage.content
                   .filter((part: any) => part.type === 'text')
                   .map((part: any) => part.text)
                   .join('');
-                finalContent = textParts;
+                console.log(`🔍 Filtered text parts length: ${textParts.length}`);
+                console.log(`🔍 Raw text parts preview: ${textParts.substring(0, 200)}...`);
+                
+                // If no text parts found, try to extract any string content
+                if (!textParts || textParts.trim().length === 0) {
+                  console.log(`⚠️ No text parts found, trying to extract any string content...`);
+                  const anyText = lastAssistantMessage.content
+                    .map((part: any) => {
+                      if (typeof part === 'string') return part;
+                      if (part.text) return part.text;
+                      if (part.content) return part.content;
+                      return '';
+                    })
+                    .join('');
+                  finalContent = anyText;
+                  console.log(`🔍 Alternative extraction result: ${anyText.substring(0, 200)}...`);
+                } else {
+                  finalContent = textParts;
+                }
+                
+                console.log(`✅ Final extracted content length: ${finalContent.length}`);
+                if (finalContent.length > 0) {
+                  console.log(`✅ Extracted array content: ${finalContent.substring(0, 100)}...`);
+                }
               } else {
+                console.log(`⚠️ Unknown content type, using fallback`);
                 finalContent = 'I have processed your request and gathered the information you needed.';
               }
-              console.log(`✅ Extracted final response from assistant message: ${finalContent.substring(0, 100)}...`);
             } else {
-              console.log(`⚠️ No assistant message found in response, using fallback`);
-              finalContent = 'I have processed your request and gathered the information you needed.';
+              console.log(`⚠️ No assistant message content found, trying result.text extraction`);
+              
+              // Try to get the final text from result.text which should have the complete response
+              try {
+                const fullText = await result.text;
+                console.log(`🔍 Result.text length: ${fullText?.length || 0}`);
+                console.log(`🔍 Result.text preview: ${fullText?.substring(0, 200) || 'empty'}...`);
+                
+                if (fullText && fullText.trim().length > 0) {
+                  // For reasoning models, the final response might be mixed with reasoning
+                  // Try to extract just the substantive answer content
+                  let cleanedText = fullText;
+                  
+                  // If it starts with reasoning patterns, try to find the actual answer
+                  if (fullText.includes('We need to answer') || fullText.includes('Step 1:') || fullText.includes('Let me search')) {
+                    // Try to find content after the last reasoning step or tool use
+                    const patterns = [
+                      /(?:Step \d+:.*?)?(?:Based on (?:my search|the research papers)|According to (?:the|recent)|The (?:research|papers|studies) (?:show|indicate|reveal)|Recent (?:studies|research|developments))/s,
+                      /(?:Here (?:are|is)|From (?:the|my) (?:search|papers)|The (?:key|main|latest) (?:findings|developments))/s,
+                      /(?:Analysis of|Summary of|Key findings)/s
+                    ];
+                    
+                    for (const pattern of patterns) {
+                      const match = fullText.match(pattern);
+                      if (match && match.index !== undefined) {
+                        cleanedText = fullText.substring(match.index);
+                        console.log(`🔧 Extracted answer from pattern match: ${cleanedText.substring(0, 100)}...`);
+                        break;
+                      }
+                    }
+                  }
+                  
+                  finalContent = cleanedText;
+                  console.log(`✅ Extracted from result.text: ${finalContent.substring(0, 100)}...`);
+                } else {
+                  console.log(`⚠️ No content found anywhere, using fallback`);
+                  finalContent = arxivMode 
+                    ? 'I found relevant research papers for your query. Please check the sources for detailed information.'
+                    : 'I have processed your request and gathered the information you needed.';
+                }
+              } catch (textError) {
+                console.log(`⚠️ Error extracting text, using fallback:`, textError);
+                finalContent = arxivMode 
+                  ? 'I found relevant research papers for your query. Please check the sources for detailed information.'
+                  : 'I have processed your request and gathered the information you needed.';
+              }
             }
           }
 
@@ -402,8 +532,15 @@ ${customInstructions ? `\n\nThe user's custom instructions are as follows and YO
             sources: capturedSources
           });
           
+          // Final fallback check - if content is still empty, provide a more helpful message
+          if (!finalContent || finalContent.trim().length === 0) {
+            finalContent = arxivMode 
+              ? 'I searched for relevant research papers but encountered an issue extracting the detailed response. Please try rephrasing your question or check the sources below for the paper information.'
+              : 'I processed your request but encountered an issue generating the response content. Please try again.';
+          }
+
           return {
-            content: finalContent || 'Response generated successfully.',
+            content: finalContent,
             model: model,
             reasoning: capturedReasoning,
             sources: capturedSources,

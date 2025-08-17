@@ -7,6 +7,24 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
     enabled: true, // User has API key
     models: [
       {
+        id: 'openai/gpt-oss-120b',
+        name: 'GPT-OSS 120B',
+        provider: 'groq',
+        maxTokens: 8192,
+        temperature: 0.7,
+        reasoningModel: true,
+        supportsTools: true
+      },
+      {
+        id: 'openai/gpt-oss-20b',
+        name: 'GPT-OSS 20B',
+        provider: 'groq',
+        maxTokens: 8192,
+        temperature: 0.7,
+        reasoningModel: true,
+        supportsTools: true
+      },
+      {
         id: 'deepseek-r1-distill-llama-70b',
         name: 'Deepseek R1 Distill 70B',
         provider: 'groq',
@@ -73,24 +91,6 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 8192,
         temperature: 0.7,
-        supportsTools: true
-      },
-      {
-        id: 'openai/gpt-oss-120b',
-        name: 'GPT-OSS 120B',
-        provider: 'groq',
-        maxTokens: 8192,
-        temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
-      },
-      {
-        id: 'openai/gpt-oss-20b',
-        name: 'GPT-OSS 20B',
-        provider: 'groq',
-        maxTokens: 8192,
-        temperature: 0.7,
-        reasoningModel: true,
         supportsTools: true
       }
     ]

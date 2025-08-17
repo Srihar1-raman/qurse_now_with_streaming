@@ -8,6 +8,12 @@ interface Source {
   domain: string;
   url: string;
   favicon?: string;
+  // arXiv-specific fields
+  arxiv_id?: string;
+  authors?: string;
+  abstract?: string;
+  submission_date?: string;
+  pdf_url?: string;
 }
 
 interface SourcesSidebarProps {
@@ -60,11 +66,45 @@ export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSide
               <div className="source-sidebar-info">
                 <div className="source-sidebar-title">{source.title}</div>
                 <div className="source-sidebar-domain">{source.domain}</div>
+                {/* Show arXiv-specific information */}
+                {source.arxiv_id && (
+                  <div className="source-sidebar-arxiv-info">
+                    <div className="source-sidebar-authors">
+                      {source.authors && `Authors: ${source.authors}`}
+                    </div>
+                    {source.submission_date && (
+                      <div className="source-sidebar-date">
+                        Submitted: {source.submission_date}
+                      </div>
+                    )}
+                    {source.abstract && (
+                      <div className="source-sidebar-abstract">
+                        {source.abstract.length > 150 
+                          ? `${source.abstract.substring(0, 150)}...` 
+                          : source.abstract}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="source-sidebar-score">
                 {Math.round(source.relevance_score * 100)}%
               </div>
             </div>
+            {/* Show PDF link for arXiv papers */}
+            {source.pdf_url && (
+              <div className="source-sidebar-actions">
+                <button 
+                  className="source-sidebar-pdf-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(source.pdf_url, '_blank', 'noopener,noreferrer');
+                  }}
+                >
+                  View PDF
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
