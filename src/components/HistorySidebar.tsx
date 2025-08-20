@@ -91,21 +91,36 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
       
       if (!isConnected && !forceRefresh) {
         console.warn('Supabase connection unhealthy, attempting to use cached data');
-        // Try to get cached data from SupabaseService
-        const cachedData = await SupabaseService.getConversations(user.id, false);
-        if (cachedData.length > 0) {
-          setChatHistory(cachedData);
-          setLastRefreshTime(now);
-          return;
+        // Try to get cached data from API route
+        try {
+          const response = await fetch('/api/conversations');
+          if (response.ok) {
+            const data = await response.json();
+            const cachedData = data.conversations || [];
+            if (cachedData.length > 0) {
+              setChatHistory(cachedData);
+              setLastRefreshTime(now);
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get cached data from API:', error);
         }
       }
       
-      const conversations = await SupabaseService.getConversations(user.id, forceRefresh);
-      setChatHistory(conversations);
-      setError(null);
-      setLastRefreshTime(now);
-      lastDataFetchRef.current = now;
-      setConnectionStatus('healthy');
+      // Use the same API route that the conversation page uses
+      const response = await fetch('/api/conversations');
+      if (response.ok) {
+        const data = await response.json();
+        const conversations = data.conversations || [];
+        setChatHistory(conversations);
+        setError(null);
+        setLastRefreshTime(now);
+        lastDataFetchRef.current = now;
+        setConnectionStatus('healthy');
+      } else {
+        throw new Error(`API request failed: ${response.status}`);
+      }
       
       // Clear any retry timeout
       if (retryTimeoutRef.current) {
@@ -146,11 +161,17 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
         try {
           setIsLoading(true);
           setError(null);
-          const conversations = await SupabaseService.getConversations(user.id, true);
-          console.log('Loaded conversations:', conversations.length);
-          setChatHistory(conversations);
-          setLastRefreshTime(Date.now());
-          lastDataFetchRef.current = Date.now();
+          const response = await fetch('/api/conversations');
+          if (response.ok) {
+            const data = await response.json();
+            const conversations = data.conversations || [];
+            console.log('Loaded conversations:', conversations.length);
+            setChatHistory(conversations);
+            setLastRefreshTime(Date.now());
+            lastDataFetchRef.current = Date.now();
+          } else {
+            throw new Error(`API request failed: ${response.status}`);
+          }
         } catch (error) {
           console.error('Error loading conversations:', error);
           setError('Failed to load conversations');
@@ -184,9 +205,15 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
     refreshIntervalRef.current = setInterval(async () => {
       console.log('Performing periodic refresh of chat history');
       try {
-        const conversations = await SupabaseService.getConversations(user.id, true);
-        setChatHistory(conversations);
-        setLastRefreshTime(Date.now());
+        const response = await fetch('/api/conversations');
+        if (response.ok) {
+          const data = await response.json();
+          const conversations = data.conversations || [];
+          setChatHistory(conversations);
+          setLastRefreshTime(Date.now());
+        } else {
+          throw new Error(`API request failed: ${response.status}`);
+        }
       } catch (error) {
         console.error('Periodic refresh failed:', error);
       }
@@ -226,9 +253,15 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
         if (timeSinceLastRefresh > 1 * 60 * 1000) {
           console.log('Tab became visible, refreshing chat history');
           try {
-            const conversations = await SupabaseService.getConversations(user.id, true);
-            setChatHistory(conversations);
-            setLastRefreshTime(now);
+            const response = await fetch('/api/conversations');
+            if (response.ok) {
+              const data = await response.json();
+              const conversations = data.conversations || [];
+              setChatHistory(conversations);
+              setLastRefreshTime(now);
+            } else {
+              throw new Error(`API request failed: ${response.status}`);
+            }
           } catch (error) {
             console.error('Visibility refresh failed:', error);
           }
@@ -553,9 +586,15 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
                     try {
                       setIsLoading(true);
                       setError(null);
-                      const conversations = await SupabaseService.getConversations(user.id, true);
-                      setChatHistory(conversations);
-                      setLastRefreshTime(Date.now());
+                      const response = await fetch('/api/conversations');
+                      if (response.ok) {
+                        const data = await response.json();
+                        const conversations = data.conversations || [];
+                        setChatHistory(conversations);
+                        setLastRefreshTime(Date.now());
+                      } else {
+                        throw new Error(`API request failed: ${response.status}`);
+                      }
                     } catch (error) {
                       console.error('Retry failed:', error);
                       setError('Failed to load conversations');
@@ -655,9 +694,15 @@ export default function HistorySidebar({ isOpen, onClose }: HistorySidebarProps)
                         if (user?.id) {
                           try {
                             await SupabaseService.refreshUserCache(user.id);
-                            const conversations = await SupabaseService.getConversations(user.id, true);
-                            setChatHistory(conversations);
-                            setLastRefreshTime(Date.now());
+                            const response = await fetch('/api/conversations');
+                            if (response.ok) {
+                              const data = await response.json();
+                              const conversations = data.conversations || [];
+                              setChatHistory(conversations);
+                              setLastRefreshTime(Date.now());
+                            } else {
+                              throw new Error(`API request failed: ${response.status}`);
+                            }
                             updateCacheStats();
                           } catch (error) {
                             console.error('Cache refresh failed:', error);
