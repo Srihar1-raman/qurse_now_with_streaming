@@ -20,7 +20,7 @@ export default function Home() {
   const [isWebSearchDropdownOpen, setIsWebSearchDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { resolvedTheme, mounted } = useTheme();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   // Web search options
@@ -355,6 +355,29 @@ export default function Home() {
       document.documentElement.style.overflow = '';
     };
   }, [isModelDropdownOpen]);
+
+  // Show loading skeleton while auth is being determined to prevent flash
+  if (authLoading) {
+    return (
+      <div className="homepage-container">
+        <Header 
+          showHistoryButton={false}
+          onHistoryClick={() => {}}
+        />
+        <main className="main-content">
+          <h1 className="title">Qurse</h1>
+          <div className="input-container">
+            <input
+              type="text"
+              className="main-input"
+              placeholder="Loading..."
+              disabled
+            />
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="homepage-container">

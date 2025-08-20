@@ -25,7 +25,7 @@ interface HeaderProps {
 export default function Header({ onSettingsClick, showAuthButtons = true, showInfoTabs = false, activeInfoSection = 'about', onInfoSectionChange, showHistoryButton = false, onHistoryClick, showNewChatButton = false, onNewChatClick, infoTabs }: HeaderProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { theme, setTheme, resolvedTheme, mounted } = useTheme();
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -245,9 +245,19 @@ export default function Header({ onSettingsClick, showAuthButtons = true, showIn
           <div className="settings-dropdown">
             <button
               onClick={toggleSettings}
-              className={user ? "btn-user-avatar" : "btn-settings"}
+              className={authLoading ? "btn-settings" : (user ? "btn-user-avatar" : "btn-settings")}
+              disabled={authLoading}
             >
-              {user ? (
+              {authLoading ? (
+                // Show loading state while auth is being determined
+                <div style={{ 
+                  width: '16px', 
+                  height: '16px', 
+                  borderRadius: '50%', 
+                  backgroundColor: 'var(--color-text-secondary)', 
+                  opacity: 0.5 
+                }}></div>
+              ) : user ? (
                 // Show user initial when authenticated
                 <span className="user-initial">
                   {getUserInitial()}

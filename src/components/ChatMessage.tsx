@@ -81,6 +81,19 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
   
   const displayContent = parsedResponse?.hasReasoning ? parsedResponse.finalAnswer : content;
   
+  // Math Error Fallback Component
+  const MathErrorFallback = ({ content }: { content: string }) => (
+    <div className="math-error-fallback">
+      <div className="math-error-header">
+        <span className="math-error-icon">⚠️</span>
+        <span className="math-error-text">Math rendering error</span>
+      </div>
+      <div className="math-error-content">
+        <code>{content}</code>
+      </div>
+    </div>
+  );
+
   // Enhanced Code Block Component
   const CodeBlock = ({ language, children }: { language?: string; children: string }) => {
     const [copied, setCopied] = useState(false);
@@ -293,7 +306,16 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
                 strict: false,
                 trust: true,
                 output: 'html',
-                displayMode: false
+                displayMode: false,
+                throwOnError: false,
+                errorColor: '#cc0000',
+                macros: {
+                  '\\RR': '\\mathbb{R}',
+                  '\\NN': '\\mathbb{N}',
+                  '\\ZZ': '\\mathbb{Z}',
+                  '\\QQ': '\\mathbb{Q}',
+                  '\\CC': '\\mathbb{C}'
+                }
               }]]}
               components={{
                 // Enhanced markdown components

@@ -36,7 +36,7 @@ interface Message {
 function ConversationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -351,7 +351,7 @@ function ConversationContent() {
     }
     
     // Only proceed if auth loading is complete
-    if (loading) {
+    if (authLoading) {
       return; // Wait for auth to be determined
     }
     
@@ -375,7 +375,7 @@ function ConversationContent() {
       setMessages([]);
       setConversationTitle('');
     }
-  }, [searchParams, user?.id, loading, modelInitialized]); // Added 'loading' and 'modelInitialized' dependencies
+  }, [searchParams, user?.id, authLoading, modelInitialized]); // Added 'authLoading' and 'modelInitialized' dependencies
 
   // Handle web search parameter on client-side only
   useEffect(() => {
