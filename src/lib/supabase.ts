@@ -26,8 +26,13 @@ export const supabase = (() => {
   }
 
   if (!supabaseClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn('Supabase environment variables not found. Client will not be created.');
+      return null;
+    }
     
     supabaseClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -51,7 +56,21 @@ export const supabase = (() => {
     }, 4 * 60 * 1000); // 4 minutes
   }
 
-  return supabaseClient;
+  return supabaseClient || {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithOAuth: async () => ({ data: { url: null }, error: null }),
+      signOut: async () => ({ error: null }),
+    },
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          single: async () => ({ data: null, error: null }),
+        }),
+      }),
+    }),
+  } as any;
 })();
 
 // Server-side Supabase client (for API routes)
