@@ -31,7 +31,22 @@ export const supabase = (() => {
     
     if (!supabaseUrl || !supabaseAnonKey) {
       console.warn('Supabase environment variables not found. Client will not be created.');
-      return null;
+      // Return dummy client instead of null
+      return {
+        auth: {
+          getSession: async () => ({ data: { session: null }, error: null }),
+          onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+          signInWithOAuth: async () => ({ data: { url: null }, error: null }),
+          signOut: async () => ({ error: null }),
+        },
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              single: async () => ({ data: null, error: null }),
+            }),
+          }),
+        }),
+      } as any;
     }
     
     supabaseClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {

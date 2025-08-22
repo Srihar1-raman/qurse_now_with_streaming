@@ -35,6 +35,13 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     // Get initial session
     const getInitialSession = async () => {
       try {
+        // Check if supabase client is properly initialized
+        if (!supabase || !supabase.auth) {
+          console.warn('Supabase client not properly initialized, skipping session check');
+          setLoading(false);
+          return;
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           // Get user data from our users table
@@ -62,6 +69,12 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     getInitialSession();
 
     // Listen for auth changes
+    if (!supabase || !supabase.auth) {
+      console.warn('Supabase client not properly initialized, skipping auth state change listener');
+      setLoading(false);
+      return;
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: string, session: any) => {
         if (event === 'SIGNED_IN' && session?.user) {
@@ -117,6 +130,10 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signIn = async (provider: 'github' | 'google' | 'twitter') => {
+    if (!supabase || !supabase.auth) {
+      throw new Error('Supabase client not properly initialized');
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -130,6 +147,10 @@ export default function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const signOut = async () => {
+    if (!supabase || !supabase.auth) {
+      throw new Error('Supabase client not properly initialized');
+    }
+
     const { error } = await supabase.auth.signOut();
     if (error) {
       throw error;
