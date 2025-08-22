@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { useTheme } from '@/lib/ThemeContext';
@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { MODEL_GROUPS, isReasoningModel } from '@/lib/ai-service';
 
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState('accounts');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -87,7 +87,7 @@ export default function SettingsPage() {
       const response = await fetch('/api/user');
       if (response.ok) {
         const data = await response.json();
-        setUserStats(data.stats);
+        setUserStats(data.stats || { totalConversations: 0 });
       }
     } catch (error) {
       console.error('Error loading user stats:', error);
@@ -396,7 +396,7 @@ export default function SettingsPage() {
                     <div className="settings-item">
                       <div className="settings-item-content">
                         <h4>Total Conversations</h4>
-                        <p>{userStats.totalConversations} conversations</p>
+                        <p>{userStats?.totalConversations || 0} conversations</p>
                       </div>
                     </div>
                   </div>
@@ -671,7 +671,7 @@ export default function SettingsPage() {
               color: 'var(--color-text-secondary)',
               lineHeight: '1.5'
             }}>
-              <li>All conversations ({userStats.totalConversations} total)</li>
+              <li>All conversations ({userStats?.totalConversations || 0} total)</li>
               <li>Account profile and settings</li>
               <li>Any uploaded files and attachments</li>
             </ul>
@@ -794,7 +794,7 @@ export default function SettingsPage() {
               color: 'var(--color-text-secondary)',
               lineHeight: '1.5'
             }}>
-              This will permanently delete all your conversations ({userStats.totalConversations} total) and cannot be undone.
+              This will permanently delete all your conversations ({userStats?.totalConversations || 0} total) and cannot be undone.
             </p>
             <p style={{ 
               margin: '0 0 16px 0', 
@@ -868,5 +868,13 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 } 

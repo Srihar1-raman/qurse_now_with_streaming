@@ -8,7 +8,7 @@ import Header from '@/components/Header';
 import ChatMessage from '@/components/ChatMessage';
 
 import { useTheme } from '@/lib/ThemeContext';
-import { aiService, ChatMessage as AIChatMessage, AI_MODELS, MODEL_GROUPS, isReasoningModel } from '@/lib/ai-service';
+import { aiService, ChatMessage as AIChatMessage, MODEL_GROUPS } from '@/lib/ai-service';
 import { SupabaseService } from '@/lib/supabase-service';
 import AuthPopup from '@/components/AuthPopup';
 import HistorySidebar from '@/components/HistorySidebar';
@@ -22,8 +22,8 @@ interface Message {
   isUser: boolean;
   timestamp: string;
   model?: string; // Add model to message interface
-  rawResponse?: any; // Add raw response for XAI models
-  reasoning?: any; // Add reasoning for captured reasoning data
+  rawResponse?: unknown; // Add raw response for XAI models
+  reasoning?: unknown; // Add reasoning for captured reasoning data
   sources?: Array<{
     title: string;
     relevance_score: number;
@@ -62,11 +62,10 @@ function ConversationContent() {
   const webSearchInitializedRef = useRef(false);
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { resolvedTheme, mounted } = useTheme();
+  const { resolvedTheme } = useTheme();
   const messageCounterRef = useRef(0);
   const initialMessageHandledRef = useRef(false);
   
-  const [conversationTitle, setConversationTitle] = useState('');
   const [showWebModeSuggestion, setShowWebModeSuggestion] = useState(false);
 
   // Web search options
@@ -96,7 +95,12 @@ function ConversationContent() {
     } else {
       setWebSearchEnabled(false);
     }
-  }, []);
+  }, [selectedWebSearchOption]);
+
+  // Wrapper function for initial message handling
+  const handleSendWithMessage = (message: string) => {
+    handleSendMessage(message);
+  };
 
   // Check if AI response suggests switching to web mode
   const checkForWebModeSuggestion = (aiResponse: string) => {
@@ -116,26 +120,6 @@ function ConversationContent() {
     
     setShowWebModeSuggestion(hasWebModeSuggestion);
   };
-
-  // Get all available models from enabled groups
-  const getAvailableModels = () => {
-    const models: { name: string; provider: string; imageSupport?: boolean; reasoningModel?: boolean }[] = [];
-    Object.values(MODEL_GROUPS).forEach(group => {
-      if (group.enabled) {
-        group.models.forEach(model => {
-          models.push({
-            name: model.name,
-            provider: group.provider,
-            imageSupport: model.imageSupport,
-            reasoningModel: model.reasoningModel
-          });
-        });
-      }
-    });
-    return models;
-  };
-
-  const availableModels = getAvailableModels();
 
   // Helper function to check if model is compatible with arxiv mode
   const isModelCompatibleWithArxiv = (modelName: string, provider: string) => {
@@ -191,10 +175,7 @@ function ConversationContent() {
 
   // Get the correct icon path based on theme
   const getIconSrc = (iconName: string, isActive: boolean = false) => {
-    // Only use theme-dependent paths after component is mounted to prevent hydration mismatch
-    if (!mounted) {
-      return `/icon/${iconName}.svg`; // Default to light theme icons during SSR
-    }
+    // Always use theme-dependent paths since we're in a client component
     
     // If the icon is in an active state (like selected model), always use light icons
     // because the background is green and we need light icons for contrast
@@ -373,9 +354,9 @@ function ConversationContent() {
     // Clear messages if no conversation ID and no initial message
     else if (!conversationId && !initialMessage && user?.id) {
       setMessages([]);
-      setConversationTitle('');
+      // Conversation title is not needed for this implementation
     }
-  }, [searchParams, user?.id, authLoading, modelInitialized]); // Added 'authLoading' and 'modelInitialized' dependencies
+  }, [searchParams, user?.id, authLoading, modelInitialized]); // Removed handleSendWithMessage from dependencies to prevent infinite loop
 
   // Handle web search parameter on client-side only
   useEffect(() => {
@@ -410,6 +391,14 @@ function ConversationContent() {
         const data = await response.json();
         const conversation = data.conversation;
         
+        console.log('🔍 Loaded conversation data:', {
+          id: conversation.id,
+          title: conversation.title,
+          model_name: conversation.model_name,
+          model_id: conversation.model_id,
+          allFields: Object.keys(conversation)
+        });
+        
         // Preserve URL model if we have one, otherwise use conversation model
         const urlParams = new URLSearchParams(window.location.search);
         const urlModel = urlParams.get('model');
@@ -419,17 +408,17 @@ function ConversationContent() {
           console.log('Preserving URL model over conversation model:', decodedUrlModel);
           setSelectedModel(decodedUrlModel);
         } else {
-          setSelectedModel(conversation.model);
-          console.log('Setting model from existing conversation:', conversation.model);
+          const conversationModel = conversation.model_name || 'GPT-OSS 120B';
+          console.log('Setting model from existing conversation:', conversationModel, 'Raw value:', conversation.model_name);
+          setSelectedModel(conversationModel);
         }
-        setConversationTitle(conversation.title);
         
         // Clear existing messages first
         setMessages([]);
         
         // Map and sort messages to ensure proper chronological order
         const loadedMessages = conversation.messages
-          .map((msg: any) => {
+          .map((msg: { id: string; content: string; role: string; created_at: string; metadata?: { model_used?: string; sources?: unknown[]; reasoning?: unknown; rawResponse?: unknown } }) => {
             const messageData = {
               id: msg.id,
               text: msg.content,
@@ -452,7 +441,7 @@ function ConversationContent() {
             
             return messageData;
           })
-          .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          .sort((a: { timestamp: string }, b: { timestamp: string }) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         
         setMessages(loadedMessages);
       } else {
@@ -606,7 +595,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
           
           if (selectedWebSearchOption === 'arXiv') {
             // Format arXiv sources for the sources sidebar
-            formattedSources = result.sources.map((source: any) => ({
+            formattedSources = result.sources.map((source: { title: string; relevance_score: number; domain: string; url: string; favicon?: string; arxiv_id?: string; authors?: string[]; abstract?: string; submission_date?: string; pdf_url?: string }) => ({
               title: source.title || source.title || 'Unknown Paper',
               relevance_score: source.relevance_score || 1,
               domain: 'arxiv.org',
@@ -621,7 +610,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
             }));
           } else {
             // Format web search sources (existing logic)
-            formattedSources = result.sources.map((source: any) => ({
+            formattedSources = result.sources.map((source: { title: string; relevance_score: number; domain: string; url: string; favicon?: string }) => ({
               title: source.title || source.title || 'Unknown Title',
               relevance_score: source.relevance_score || 1,
               domain: source.domain || 'unknown',
@@ -635,32 +624,11 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
         
         // Check if AI suggests switching to web mode
         checkForWebModeSuggestion(result.choices[0].message.content);
-      } catch (error) {
-        console.error('AI API error:', error);
-        // Try simulation as fallback
-        try {
-          const simulatedResponse = await aiService.simulateResponse(selectedModel, userMessageText);
-          const userTimestamp = new Date(userMessageObj.timestamp);
-          if (isNaN(userTimestamp.getTime())) {
-            throw new Error('Invalid user message timestamp');
-          }
-          const aiTimestamp = new Date(userTimestamp.getTime() + 2000);
-          const aiCounter = messageCounterRef.current++;
-          aiResponse = {
-            id: `ai-${aiTimestamp.getTime()}-${aiCounter}`,
-            text: simulatedResponse.content,
-            isUser: false,
-            timestamp: aiTimestamp.toISOString(),
-            model: selectedModel, // Store the model used for this response
-            rawResponse: simulatedResponse.rawResponse, // Store the raw response for XAI models
-            reasoning: simulatedResponse.reasoning // Store the captured reasoning data
-          };
-        } catch (simError) {
-          // Both AI and simulation failed
-          setAiError('AI is currently unavailable. Your message has been saved and you can retry.');
-          setIsLoading(false);
-          return; // Exit without creating AI response
-        }
+      } catch {
+        // Both AI and simulation failed
+        setAiError('AI is currently unavailable. Your message has been saved and you can retry.');
+        setIsLoading(false);
+        return; // Exit without creating AI response
       }
 
       // Add AI response to messages
@@ -789,8 +757,30 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
           url.searchParams.delete('message'); // Remove initial message from URL
           window.history.replaceState({}, '', url.toString());
           
-          // The conversation was created with the initial message, so we can proceed directly
-          // No need to save the user message again since it was already saved during conversation creation
+          // Save the initial user message to the newly created conversation
+          try {
+            const messageResponse = await fetch(`/api/conversations/${conversationId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                content: messageText,
+                role: 'user',
+                metadata: { model_used: selectedModel }
+              })
+            });
+            
+            if (!messageResponse.ok) {
+              console.error('Failed to save initial message:', await messageResponse.text());
+            } else {
+              console.log('Initial message saved successfully');
+            }
+          } catch (error) {
+            console.error('Error saving initial message:', error);
+          }
+          
+          // Now proceed with AI response
           setTimeout(() => {
             handleAIResponse(messageText, userMessage, conversationId || undefined);
           }, 100);
@@ -817,16 +807,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
           }, 100);
           return;
         }
-      } catch (error) {
-        // Check if it's a user-related error
-        if (error instanceof Error && (error.message.includes('User not found') || error.message.includes('Unauthorized'))) {
-          // User authentication issue - try to continue without conversation
-          setTimeout(() => {
-            handleAIResponse(messageText, userMessage, undefined);
-          }, 100);
-          return;
-        }
-        
+      } catch {
         // If conversation creation failed, still try to get AI response
         setTimeout(() => {
           handleAIResponse(messageText, userMessage, undefined);
@@ -856,8 +837,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
         } else {
           console.log('User message saved successfully');
         }
-      } catch (error) {
-        console.error('Error saving user message:', error);
+      } catch {
+        console.error('Error saving user message');
         // Continue with AI response even if saving failed
       }
     } else if (!conversationId && user?.id) {
@@ -876,11 +857,6 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
   // Button click handler
   const handleSend = () => {
     handleSendMessage();
-  };
-
-  // Wrapper function for initial message handling
-  const handleSendWithMessage = (message: string) => {
-    handleSendMessage(message);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -949,8 +925,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
             deleteFromIndex: messageIndex
           })
         });
-      } catch (error) {
-        console.error('Error deleting messages from Supabase:', error);
+      } catch {
+        console.error('Error deleting messages from Supabase');
         // Continue with local redo even if database deletion fails
       }
     }
@@ -1037,43 +1013,34 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
               <div className="message bot-message">
                 <div style={{ maxWidth: '95%', marginRight: 'auto' }}>
                   <div className="message-content">
-                    {isReasoningModel(selectedModel) ? (
-                      // Reasoning model loading animation
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Reasoning model loading animation */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ 
+                        width: '16px', 
+                        height: '16px', 
+                        backgroundColor: 'var(--color-primary)', 
+                        borderRadius: '50%', 
+                        animation: 'reasoning 2s infinite linear',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
                         <div style={{ 
-                          width: '16px', 
-                          height: '16px', 
-                          backgroundColor: 'var(--color-primary)', 
-                          borderRadius: '50%', 
-                          animation: 'reasoning 2s infinite linear',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          <div style={{ 
-                            width: '8px', 
-                            height: '8px', 
-                            backgroundColor: 'white', 
-                            borderRadius: '50%',
-                            animation: 'reasoningPulse 1s infinite ease-in-out'
-                          }}></div>
-                        </div>
-                        <span style={{ 
-                          color: 'var(--color-text-secondary)', 
-                          fontSize: '14px',
-                          fontStyle: 'italic'
-                        }}>
-                          Reasoning...
-                        </span>
+                          width: '8px', 
+                          height: '8px', 
+                          backgroundColor: 'white', 
+                          borderRadius: '50%',
+                          animation: 'reasoningPulse 1s infinite ease-in-out'
+                        }}></div>
                       </div>
-                    ) : (
-                      // Regular model loading animation (three bouncing dots)
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <div style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-text-muted)', borderRadius: '50%', animation: 'bounce 1s infinite' }}></div>
-                        <div style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-text-muted)', borderRadius: '50%', animation: 'bounce 1s infinite 0.1s' }}></div>
-                        <div style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-text-muted)', borderRadius: '50%', animation: 'bounce 1s infinite 0.2s' }}></div>
-                      </div>
-                    )}
+                      <span style={{ 
+                        color: 'var(--color-text-secondary)', 
+                        fontSize: '14px',
+                        fontStyle: 'italic'
+                      }}>
+                        Reasoning...
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

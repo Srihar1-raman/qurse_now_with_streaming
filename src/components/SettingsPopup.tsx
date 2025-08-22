@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { useTheme } from '@/lib/ThemeContext';
+import { useTheme, type Theme } from '@/lib/ThemeContext';
 import { useAuth } from './SessionProvider';
 
 interface SettingsPopupProps {
@@ -15,7 +15,7 @@ export default function SettingsPopup({ isOpen, onClose }: SettingsPopupProps) {
   const { theme, setTheme, resolvedTheme, mounted } = useTheme();
   const { user } = useAuth();
 
-  const handleThemeChange = async (theme: string) => {
+  const handleThemeChange = async (theme: Theme) => {
     setTheme(theme)
     try {
       await fetch('/api/user', {

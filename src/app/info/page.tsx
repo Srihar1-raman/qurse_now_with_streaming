@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import { useTheme } from '@/lib/ThemeContext';
 import { useAuth } from '@/components/SessionProvider';
 import HistorySidebar from '@/components/HistorySidebar';
 
-export default function InfoPage() {
+function InfoPageContent() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState('about');
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -193,5 +193,13 @@ export default function InfoPage() {
         <a href="/info?section=terms">Terms</a> • <a href="/info?section=privacy">Privacy Policy</a> • <a href="/info?section=cookies">Cookies</a>
       </footer>
     </div>
+  );
+}
+
+export default function InfoPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <InfoPageContent />
+    </Suspense>
   );
 } 

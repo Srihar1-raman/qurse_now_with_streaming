@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       if (user) {
         try {
           // Check if a user with this email already exists
-          const { data: existingUser, error: emailCheckError } = await supabase
+          const { data: existingUser } = await supabase
             .from('users')
             .select('id, email, name, avatar_url, preferences')
             .eq('email', user.email)

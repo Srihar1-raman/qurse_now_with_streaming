@@ -103,19 +103,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert to expected format for frontend
-    const formattedResult = {
-      choices: [{
-        message: {
-          content: result.content || result.choices?.[0]?.message?.content || 'No content available',
-          role: 'assistant'
-        }
-      }],
-      model: result.model,
-      usage: result.usage,
-      rawResult: result,
-      reasoning: result.reasoning,
-      sources: result.sources || []
-    };
+    // Handle different result formats from generateAITextWithTools vs generateAIText
+    let formattedResult;
+    
+    if ('choices' in result && result.choices) {
+      // Result from generateAIText (has choices structure)
+      formattedResult = {
+        choices: result.choices,
+        model: result.model,
+        usage: result.usage,
+        rawResult: result,
+        reasoning: (result as any).reasoning,
+        sources: (result as any).sources || []
+      };
+    } else {
+      // Result from generateAITextWithTools (has content structure)
+      formattedResult = {
+        choices: [{
+          message: {
+            content: (result as any).content || 'No content available',
+            role: 'assistant'
+          }
+        }],
+        model: result.model,
+        usage: result.usage,
+        rawResult: result,
+        reasoning: (result as any).reasoning,
+        sources: (result as any).sources || []
+      };
+    }
 
     return NextResponse.json(formattedResult);
   } catch (error) {

@@ -1,0 +1,10 @@
+# Exclude old version project from Vercel builds
+old_version_project/
+old_version_project/**/*
+
+# Exclude other unnecessary files
+node_modules/
+.next/
+.git/
+*.log
+.DS_Store

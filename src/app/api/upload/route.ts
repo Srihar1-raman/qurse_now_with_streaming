@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     const filePath = `uploads/${fileName}`
 
     // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('uploads')
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -98,37 +98,26 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id: userId,
         conversation_id: conversationId,
-        filename: file.name,
+        file_name: file.name,
         file_path: filePath,
         file_size: file.size,
-        mime_type: file.type
+        file_type: file.type,
+        created_at: new Date().toISOString()
       })
       .select('*')
       .single()
 
     if (dbError) {
-      // Clean up uploaded file if database insert fails
-      await supabase.storage.from('uploads').remove([filePath])
+      console.error('Error saving file record:', dbError)
       return NextResponse.json({ error: 'Failed to save file record' }, { status: 500 })
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('uploads')
-      .getPublicUrl(filePath)
-
-    return NextResponse.json({
-      success: true,
-      file: {
-        id: fileRecord.id,
-        filename: fileRecord.filename,
-        url: urlData.publicUrl,
-        size: fileRecord.file_size,
-        type: fileRecord.mime_type
-      }
+    return NextResponse.json({ 
+      success: true, 
+      file: fileRecord 
     })
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -147,7 +136,7 @@ export async function DELETE(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -156,7 +145,7 @@ export async function DELETE(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -214,7 +203,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true })
 
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 } 

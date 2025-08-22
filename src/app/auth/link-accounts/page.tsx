@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Image from 'next/image';
 
-export default function LinkAccountsPage() {
+function LinkAccountsPageContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -259,5 +259,13 @@ export default function LinkAccountsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LinkAccountsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <LinkAccountsPageContent />
+    </Suspense>
   );
 } 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     console.log('=== Testing Supabase Connection ===');
     
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -53,30 +53,32 @@ export async function GET(request: NextRequest) {
     });
 
     // Test 3: Check if we can query the database
-    let dbTest = { success: false, error: null, data: null };
+    let dbTest: { success: boolean; error: string | null; data: any } = { success: false, error: null, data: null };
     try {
       const { data, error } = await supabase
         .from('users')
         .select('id, email')
         .limit(1);
       
-      dbTest = { success: !error, error: error?.message, data };
+      dbTest = { success: !error, error: error?.message || null, data };
       console.log('Database test:', dbTest);
     } catch (dbError) {
-      dbTest = { success: false, error: dbError.message, data: null };
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+      dbTest = { success: false, error: errorMessage, data: null };
       console.log('Database test failed:', dbError);
     }
 
     // Test 4: Check if function exists
-    let functionTest = { success: false, error: null };
+    let functionTest: { success: boolean; error: string | null } = { success: false, error: null };
     if (user) {
       try {
         const { data, error } = await supabase
           .rpc('get_conversations_with_message_count', { user_uuid: user.id });
-        functionTest = { success: !error, error: error?.message };
+        functionTest = { success: !error, error: error?.message || null };
         console.log('Function test:', functionTest);
       } catch (funcError) {
-        functionTest = { success: false, error: funcError.message };
+        const errorMessage = funcError instanceof Error ? funcError.message : 'Unknown function error';
+        functionTest = { success: false, error: errorMessage };
         console.log('Function test failed:', funcError);
       }
     }
@@ -98,9 +100,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Test endpoint error:', error);
-    return NextResponse.json({ 
-      error: 'Test failed',
-      details: error.message || error
-    }, { status: 500 });
+    return NextResponse.json({ error: 'Test failed' }, { status: 500 });
   }
 } 

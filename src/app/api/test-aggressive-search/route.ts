@@ -29,11 +29,19 @@ export async function POST(request: NextRequest) {
       webSearchEnabled: true
     });
 
+    // Handle different result formats
+    let responseContent;
+    if ('choices' in result && result.choices) {
+      responseContent = result.choices[0].message.content;
+    } else {
+      responseContent = (result as any).content;
+    }
+
     return NextResponse.json({
       success: true,
       model,
       query,
-      response: result.choices[0].message.content,
+      response: responseContent,
       rawResult: result
     });
 

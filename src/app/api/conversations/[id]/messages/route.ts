@@ -20,7 +20,7 @@ export async function POST(
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -29,7 +29,7 @@ export async function POST(
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -124,7 +124,7 @@ export async function GET(
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -133,7 +133,7 @@ export async function GET(
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -201,7 +201,7 @@ export async function DELETE(
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -210,7 +210,7 @@ export async function DELETE(
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -295,7 +295,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
 
   } catch (error) {
-    console.error('DELETE message error:', error)
+    console.error('DELETE messages error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 } 

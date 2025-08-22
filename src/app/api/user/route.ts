@@ -3,7 +3,7 @@ import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 // DELETE /api/user - Delete user account and all data
-export async function DELETE(request: NextRequest) {
+export async function DELETE() {
   try {
     const cookieStore = await cookies();
     const supabase = createSupabaseServerClient(
@@ -17,7 +17,7 @@ export async function DELETE(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -26,7 +26,7 @@ export async function DELETE(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -98,7 +98,7 @@ export async function PATCH(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -114,52 +114,29 @@ export async function PATCH(request: NextRequest) {
     }
 
     const userId = user.id;
-    const body = await request.json()
-    const { preferences } = body
+    const { preferences } = await request.json()
 
     if (!preferences) {
-      return NextResponse.json({ error: 'Preferences data is required' }, { status: 400 })
-    }
-
-    // Get current user data to merge preferences
-    const { data: currentUser, error: fetchError } = await supabase
-      .from('users')
-      .select('preferences')
-      .eq('id', userId)
-      .single()
-
-    if (fetchError) {
-      console.error('Error fetching current user preferences:', fetchError)
-      return NextResponse.json({ error: 'Failed to fetch current preferences' }, { status: 500 })
-    }
-
-    // Merge current preferences with new preferences
-    const currentPreferences = currentUser?.preferences || {}
-    const updatedPreferences = {
-      ...currentPreferences,
-      ...preferences,
-      updated_at: new Date().toISOString()
+      return NextResponse.json({ error: 'Preferences are required' }, { status: 400 })
     }
 
     // Update user preferences
-    const { error: updateError } = await supabase
+    const { data: updatedUser, error: updateError } = await supabase
       .from('users')
-      .update({ 
-        preferences: updatedPreferences,
-        updated_at: new Date().toISOString()
-      })
+      .update({ preferences })
       .eq('id', userId)
+      .select('*')
+      .single()
 
     if (updateError) {
       console.error('Error updating user preferences:', updateError)
-      return NextResponse.json({ error: 'Failed to update preferences' }, { status: 500 })
+      return NextResponse.json({ 
+        error: 'Failed to update preferences',
+        details: updateError.message || updateError
+      }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Preferences updated successfully',
-      preferences: updatedPreferences
-    })
+    return NextResponse.json({ user: updatedUser })
 
   } catch (error) {
     console.error('PATCH user error:', error)
@@ -167,8 +144,8 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// GET /api/user - Get user profile information
-export async function GET(request: NextRequest) {
+// GET /api/user - Get user profile and preferences
+export async function GET() {
   try {
     const cookieStore = await cookies();
     const supabase = createSupabaseServerClient(
@@ -182,7 +159,7 @@ export async function GET(request: NextRequest) {
           set(name: string, value: string, options: any) {
             try {
               cookieStore.set({ name, value, ...options });
-            } catch (error) {
+            } catch {
               // The `set` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -191,7 +168,7 @@ export async function GET(request: NextRequest) {
           remove(name: string, options: any) {
             try {
               cookieStore.set({ name, value: '', ...options });
-            } catch (error) {
+            } catch {
               // The `delete` method was called from a Server Component.
               // This can be ignored if you have middleware refreshing
               // user sessions.
@@ -208,35 +185,22 @@ export async function GET(request: NextRequest) {
 
     const userId = user.id;
 
-    // Get user data with conversation count
-    const { data: userData, error: userError } = await supabase
+    // Get user profile from our users table
+    const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .single()
 
-    if (userError) {
-      console.error('Error fetching user:', userError)
-      return NextResponse.json({ error: 'Failed to fetch user data' }, { status: 500 })
+    if (profileError) {
+      console.error('Error fetching user profile:', profileError)
+      return NextResponse.json({ 
+        error: 'Failed to fetch profile',
+        details: profileError.message || profileError
+      }, { status: 500 })
     }
 
-    // Get conversation count
-    const { count: conversationCount, error: countError } = await supabase
-      .from('conversations')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-
-    if (countError) {
-      console.error('Error counting conversations:', countError)
-    }
-
-    return NextResponse.json({ 
-      user: userData,
-      preferences: userData.preferences,
-      stats: {
-        totalConversations: conversationCount || 0
-      }
-    })
+    return NextResponse.json({ user: profile })
 
   } catch (error) {
     console.error('GET user error:', error)
