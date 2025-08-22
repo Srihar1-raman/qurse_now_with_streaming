@@ -1,36 +1,64 @@
 import { createClient } from '@supabase/supabase-js'
 import { createBrowserClient } from '@supabase/ssr'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Lazy client creation - only create when actually needed
+let supabaseClient: ReturnType<typeof createBrowserClient> | null = null;
 
 // Client-side Supabase client
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
+export const supabase = (() => {
+  if (typeof window === 'undefined') {
+    // Server-side or build time - return a dummy client
+    return {
+      auth: {
+        getSession: async () => ({ data: { session: null }, error: null }),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        signInWithOAuth: async () => ({ data: { url: null }, error: null }),
+        signOut: async () => ({ error: null }),
+      },
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({ data: null, error: null }),
+          }),
+        }),
+      }),
+    } as any;
   }
-})
 
-// Keep-alive mechanism for long-running connections
-if (typeof window !== 'undefined') {
-  // Ping the connection every 4 minutes to keep it alive
-  setInterval(async () => {
-    try {
-      await supabase.from('conversations').select('id').limit(1);
-    } catch (error) {
-      console.warn('Supabase keep-alive ping failed:', error);
-    }
-  }, 4 * 60 * 1000); // 4 minutes
-}
+  if (!supabaseClient) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    
+    supabaseClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      }
+    });
+
+    // Keep-alive mechanism for long-running connections
+    setInterval(async () => {
+      try {
+        await supabaseClient!.from('conversations').select('id').limit(1);
+      } catch (error) {
+        console.warn('Supabase keep-alive ping failed:', error);
+      }
+    }, 4 * 60 * 1000); // 4 minutes
+  }
+
+  return supabaseClient;
+})();
 
 // Server-side Supabase client (for API routes)
 export const createServerClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  
   return createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       autoRefreshToken: false,

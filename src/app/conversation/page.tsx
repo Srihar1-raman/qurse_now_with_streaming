@@ -999,7 +999,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                     className="switch-mode-btn"
                     onClick={() => {
                       setWebSearchEnabled(true);
-                      setSelectedWebSearchOption('Exa');
+                      setSelectedWebSearchOption('Web Search (Exa)');
                       setShowWebModeSuggestion(false);
                     }}
                   >
