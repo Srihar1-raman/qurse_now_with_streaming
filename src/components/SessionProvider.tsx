@@ -134,10 +134,25 @@ export default function AuthProvider({ children }: AuthProviderProps) {
       throw new Error('Supabase client not properly initialized');
     }
 
+    // Get the correct redirect URL based on environment
+    let redirectUrl: string;
+    
+    if (typeof window !== 'undefined') {
+      // Client-side: use current origin
+      redirectUrl = `${window.location.origin}/auth/callback`;
+    } else {
+      // Server-side: use environment variable or fallback
+      redirectUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
+        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/auth/callback`
+        : '/auth/callback';
+    }
+
+    console.log('OAuth redirect URL:', redirectUrl);
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: redirectUrl,
       },
     });
     
