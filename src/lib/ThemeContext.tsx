@@ -47,14 +47,50 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     return themeToResolve;
   }, [getSystemTheme]);
 
+  // Update favicons based on theme
+  const updateFavicons = useCallback((isDarkTheme: boolean) => {
+    if (typeof window !== 'undefined') {
+      // Invert the logic: light mode shows dark favicon, dark mode shows light favicon
+      const theme = isDarkTheme ? 'light' : 'dark';
+      
+      // Update all favicon types
+      const faviconTypes = [
+        { rel: 'icon', href: `/favicon-${theme}/favicon.ico` },
+        { rel: 'icon', href: `/favicon-${theme}/favicon-16x16.png`, sizes: '16x16' },
+        { rel: 'icon', href: `/favicon-${theme}/favicon-32x32.png`, sizes: '32x32' },
+        { rel: 'apple-touch-icon', href: `/favicon-${theme}/apple-touch-icon.png`, sizes: '180x180' },
+        { rel: 'icon', href: `/favicon-${theme}/android-chrome-192x192.png`, sizes: '192x192' },
+        { rel: 'icon', href: `/favicon-${theme}/android-chrome-512x512.png`, sizes: '512x512' }
+      ];
+      
+      faviconTypes.forEach(({ rel, href, sizes }) => {
+        // Remove existing link if it exists
+        const existingLink = document.querySelector(`link[rel="${rel}"]${sizes ? `[sizes="${sizes}"]` : ''}`) as HTMLLinkElement;
+        if (existingLink) {
+          existingLink.remove();
+        }
+        
+        // Create new link
+        const newLink = document.createElement('link');
+        newLink.rel = rel;
+        newLink.href = href;
+        if (sizes) newLink.sizes = sizes;
+        document.head.appendChild(newLink);
+      });
+    }
+  }, []);
+
   // Apply theme to document
   const applyTheme = useCallback((appliedTheme: 'light' | 'dark', themeMode: Theme) => {
     if (typeof window !== 'undefined') {
       const root = document.documentElement;
       root.setAttribute('data-theme', themeMode);
       setResolvedTheme(appliedTheme);
+      
+      // Update favicons based on theme
+      updateFavicons(appliedTheme === 'dark');
     }
-  }, []);
+  }, [updateFavicons]);
 
   // Set theme with persistence
   const setTheme = (newTheme: Theme) => {
@@ -64,6 +100,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
     const resolved = resolveTheme(newTheme);
     applyTheme(resolved, newTheme);
+    
+    // Force favicon update immediately
+    updateFavicons(resolved === 'dark');
   };
 
   // Get icon path based on resolved theme
@@ -99,6 +138,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [theme, resolveTheme, applyTheme]);
 
+  // Update favicons whenever resolved theme changes
+  useEffect(() => {
+    updateFavicons(resolvedTheme === 'dark');
+  }, [resolvedTheme, updateFavicons]);
 
 
   const value: ThemeContextType = {
