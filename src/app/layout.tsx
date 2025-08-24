@@ -14,6 +14,20 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Qurse",
   description: "AI Assistant - A modern AI chat interface",
+  icons: {
+    icon: [
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon.ico', type: 'image/x-icon' }
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }
+    ],
+    other: [
+      { rel: 'icon', url: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
+      { rel: 'icon', url: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' }
+    ]
+  },
 };
 
 export const viewport: Viewport = {
@@ -31,7 +45,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning={true}>
-            <head>
+      <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `
