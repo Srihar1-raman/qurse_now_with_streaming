@@ -2,10 +2,9 @@ import { generateText, streamText, generateObject } from 'ai';
 import { z } from 'zod';
 import { getModelInfo, AI_MODELS } from './models';
 import { providers } from './providers';
-import { AIResponse } from '@/types/ai';
 
 // Get model instance for Vercel AI SDK
-function getModel(modelKey: string): any | null {
+export function getModel(modelKey: string): any | null {
   // Only work on server-side
   if (typeof window !== 'undefined') {
     return null;
@@ -19,6 +18,7 @@ function getModel(modelKey: string): any | null {
 
   console.log(`🔍 Getting model instance for: ${modelKey} (${modelInfo.provider})`);
 
+  // Use qurse provider for all models
   const provider = providers[modelInfo.provider as keyof typeof providers];
   if (provider) {
     const modelInstance = provider(modelInfo.id);

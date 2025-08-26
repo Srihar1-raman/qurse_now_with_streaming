@@ -1,7 +1,7 @@
 import Exa from 'exa-js';
 
 // Exa AI service for web search and content retrieval
-// Based on Scira implementation: https://github.com/zaidmukaddam/scira
+
 
 export interface ExaSearchResult {
   url: string;
@@ -10,6 +10,7 @@ export interface ExaSearchResult {
   published_date?: string;
   author?: string;
   image?: string;
+  favicon?: string;
 }
 
 export interface ExaSearchResponse {
@@ -122,6 +123,7 @@ export async function performExaSearch(
       published_date: topic === 'news' && result.publishedDate ? result.publishedDate : undefined,
       author: result.author || undefined,
       image: result.image || undefined,
+      favicon: result.favicon || undefined,
     }));
 
     return {

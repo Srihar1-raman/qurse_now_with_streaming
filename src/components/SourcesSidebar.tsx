@@ -24,6 +24,19 @@ interface SourcesSidebarProps {
 
 export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSidebarProps) {
   const { resolvedTheme, mounted } = useTheme();
+
+  // Helper function to extract domain from source
+  const getDomain = (source: any): string => {
+    let domain = source.domain;
+    if (!domain && source.url) {
+      try {
+        domain = new URL(source.url).hostname;
+      } catch (e) {
+        domain = source.url;
+      }
+    }
+    return domain || 'Unknown source';
+  };
   const [expandedPdfs, setExpandedPdfs] = useState<Set<number>>(new Set());
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -91,13 +104,15 @@ export default function SourcesSidebar({ isOpen, onClose, sources }: SourcesSide
                   <img src={source.favicon} alt="" width={20} height={20} />
                 ) : (
                   <div className="source-sidebar-favicon-placeholder">
-                    {source.domain.charAt(0).toUpperCase()}
+                    {(getDomain(source) || source.title || 'S').charAt(0).toUpperCase()}
                   </div>
                 )}
               </div>
               <div className="source-sidebar-info">
                 <div className="source-sidebar-title">{source.title}</div>
-                <div className="source-sidebar-domain">{source.domain}</div>
+                <div className="source-sidebar-domain">
+                  {getDomain(source)}
+                </div>
               </div>
               <div className="source-sidebar-score">
                 {Math.round(source.relevance_score * 100)}%

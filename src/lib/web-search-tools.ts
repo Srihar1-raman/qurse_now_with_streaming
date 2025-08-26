@@ -37,16 +37,36 @@ export const aggressiveWebSearchTool = tool({
         const searchResponse = await performExaSearch(query, maxResults, effectiveTopic, quality);
         
         if (searchResponse.results && searchResponse.results.length > 0) {
-          const formattedResults = searchResponse.results.map((result, index) => ({
-            query,
-            source: `${index + 1}`,
-            title: result.title,
-            url: result.url,
-            content: result.content,
-            author: result.author,
-            published_date: result.published_date,
-            image: result.image
-          }));
+          const formattedResults = searchResponse.results.map((result, index) => {
+            // Generate favicon URL and extract domain if not provided by Exa
+            let favicon = result.favicon;
+            let domain = '';
+            if (result.url) {
+              try {
+                domain = new URL(result.url).hostname;
+                if (!favicon) {
+                  favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+                }
+              } catch (e) {
+                // Fallback if URL parsing fails
+                domain = result.url;
+                favicon = undefined;
+              }
+            }
+            
+            return {
+              query,
+              source: `${index + 1}`,
+              title: result.title,
+              url: result.url,
+              domain: domain,
+              content: result.content,
+              author: result.author,
+              published_date: result.published_date,
+              image: result.image,
+              favicon: favicon
+            };
+          });
           
           allResults.push(...formattedResults);
         }

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { parseReasoningResponse, isReasoningModel } from '@/lib/ai-service';
+import React, { useState } from 'react';
+import { parseReasoningResponse } from '@/lib/ai/parsing';
+import { isReasoningModel } from '@/lib/ai/models';
 import { useTheme } from '@/lib/ThemeContext';
 import Image from 'next/image';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -27,9 +28,11 @@ interface ChatMessageProps {
   onSourcesClick?: () => void; // Add callback for sources button click
 }
 
-export default function ChatMessage({ content, isUser, model, onRedo, rawResponse, reasoning, sources, onSourcesClick }: ChatMessageProps) {
+const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, onRedo, rawResponse, reasoning, sources, onSourcesClick }: ChatMessageProps) {
   const [showReasoning, setShowReasoning] = useState(false);
   const { resolvedTheme, mounted } = useTheme();
+
+  // Performance optimization: memoized component to reduce re-renders
 
   // Get the correct icon path based on theme
   const getIconSrc = (iconName: string) => {
@@ -73,6 +76,21 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
   }
   
   const displayContent = parsedResponse?.hasReasoning ? parsedResponse.finalAnswer : content;
+  
+  // Performance optimization: Simple debouncing to prevent excessive markdown rendering
+  const [debouncedContent, setDebouncedContent] = useState(content);
+  const [shouldUseMarkdown, setShouldUseMarkdown] = useState(true);
+  
+  React.useEffect(() => {
+    // Disable markdown rendering during rapid content changes (streaming)
+    setShouldUseMarkdown(false);
+    const timer = setTimeout(() => {
+      setDebouncedContent(displayContent);
+      setShouldUseMarkdown(true);
+    }, 150); // Short delay to batch updates
+    
+    return () => clearTimeout(timer);
+  }, [displayContent]);
   
 
 
@@ -154,7 +172,22 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
           {isUser ? (
             displayContent
           ) : (
-            <MarkdownRenderer content={displayContent} />
+            // Use simple text during streaming, markdown when stable
+            shouldUseMarkdown ? (
+              <MarkdownRenderer content={debouncedContent} />
+            ) : (
+              // Show plain text during streaming to prevent lag
+              <pre style={{ 
+                whiteSpace: 'pre-wrap', 
+                fontFamily: 'inherit',
+                margin: 0,
+                padding: 0,
+                border: 'none',
+                background: 'transparent'
+              }}>
+                {displayContent}
+              </pre>
+            )
           )}
         </div>
         
@@ -208,4 +241,6 @@ export default function ChatMessage({ content, isUser, model, onRedo, rawRespons
       </div>
     </div>
   );
-} 
+});
+
+export default ChatMessage; 

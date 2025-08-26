@@ -82,7 +82,34 @@ export function parseReasoningResponse(content: string, modelName?: string, rawR
     console.log(`❌ No reasoning found in XAI response structure`);
   }
   
-  // PATTERN 2: Groq models with <think> tags (Deepseek, Qwen, etc.)
+  // PATTERN 2: GPT-OSS models - check for reasoning in rawResponse first
+  if (modelName && modelName.includes('GPT-OSS') && rawResponse) {
+    console.log(`🔍 Checking GPT-OSS reasoning patterns for ${modelName}`);
+    
+    // Check Vercel AI SDK specific fields for GPT-OSS models
+    if (rawResponse.reasoning && rawResponse.reasoning.trim()) {
+      console.log(`✅ Found reasoning in rawResponse.reasoning for GPT-OSS`);
+      return {
+        reasoning: rawResponse.reasoning.trim(),
+        finalAnswer: normalizedContent,
+        hasReasoning: true
+      };
+    }
+    
+    // Check steps array for reasoning
+    if (rawResponse.steps && rawResponse.steps[0] && rawResponse.steps[0].reasoning && rawResponse.steps[0].reasoning.trim()) {
+      console.log(`✅ Found reasoning in rawResponse.steps[0].reasoning for GPT-OSS`);
+      return {
+        reasoning: rawResponse.steps[0].reasoning.trim(),
+        finalAnswer: normalizedContent,
+        hasReasoning: true
+      };
+    }
+    
+    console.log(`❌ No reasoning found in GPT-OSS response structure`);
+  }
+
+  // PATTERN 3: Groq models with <think> tags (Deepseek, Qwen, etc.)
   const thinkMatch = normalizedContent.match(/<think>([\s\S]*?)<\/think>/i);
   if (thinkMatch && thinkMatch[1] && thinkMatch[1].trim()) {
     const reasoning = thinkMatch[1].trim();
@@ -95,7 +122,7 @@ export function parseReasoningResponse(content: string, modelName?: string, rawR
     };
   }
   
-  // PATTERN 3: Alternative <thinking> tags
+  // PATTERN 4: Alternative <thinking> tags
   const thinkingMatch = normalizedContent.match(/<thinking>([\s\S]*?)<\/thinking>/i);
   if (thinkingMatch && thinkingMatch[1] && thinkingMatch[1].trim()) {
     const reasoning = thinkingMatch[1].trim();
@@ -108,7 +135,7 @@ export function parseReasoningResponse(content: string, modelName?: string, rawR
     };
   }
   
-  // PATTERN 4: Step-by-step reasoning without tags (fallback)
+  // PATTERN 5: Step-by-step reasoning without tags (fallback)
   const stepPattern = /(?:^|\n)(?:\d+\.|\*\*[^*]+\*\*|Step\s+\d+)[\s\S]*?(?=\n\n|\n\*\*Final Answer\*\*|\n\*\*Answer\*\*|$)/i;
   const stepMatch = normalizedContent.match(stepPattern);
   if (stepMatch && stepMatch[0] && stepMatch[0].trim()) {
@@ -122,7 +149,7 @@ export function parseReasoningResponse(content: string, modelName?: string, rawR
     };
   }
   
-  // PATTERN 5: Captured reasoning from onFinish callback
+  // PATTERN 6: Captured reasoning from onFinish callback
   if (rawResponse?.reasoning && rawResponse.reasoning.combinedReasoning) {
     console.log(`✅ Found captured reasoning from onFinish callback`);
     return {

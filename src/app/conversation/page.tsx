@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
+import { useState, useRef, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/components/SessionProvider';
+import { useChat } from 'ai/react';
 import Image from 'next/image';
 import Header from '@/components/Header';
 import ChatMessage from '@/components/ChatMessage';
@@ -37,10 +38,10 @@ function ConversationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  
   const [aiError, setAiError] = useState<string | null>(null);
+  
+
   const lastSubmitTimeRef = useRef(0);
   const [selectedModel, setSelectedModel] = useState('GPT-OSS 120B');
   const [modelInitialized, setModelInitialized] = useState(false);
@@ -63,8 +64,10 @@ function ConversationContent() {
   const conversationEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { resolvedTheme } = useTheme();
-  const messageCounterRef = useRef(0);
   const initialMessageHandledRef = useRef(false);
+  const conversationLoadedRef = useRef(false);
+  const messageCounterRef = useRef(0); // Keep for old functions (TODO: remove)
+  const currentConversationIdRef = useRef<string | null>(null);
   
   const [showWebModeSuggestion, setShowWebModeSuggestion] = useState(false);
 
@@ -97,10 +100,121 @@ function ConversationContent() {
     }
   }, [selectedWebSearchOption]);
 
-  // Wrapper function for initial message handling
-  const handleSendWithMessage = (message: string) => {
-    handleSendMessage(message);
-  };
+  // Load initial messages for existing conversations
+  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+
+  // Generate consistent conversation ID like scira-main
+  const conversationId = searchParams.get('id');
+  const chatId = useMemo(() => conversationId || `conv-${Date.now()}`, [conversationId]);
+  
+  // Update the ref when conversationId changes
+  useEffect(() => {
+    currentConversationIdRef.current = conversationId;
+  }, [conversationId]);
+  
+  // Vercel AI SDK useChat hook - SINGLE source of truth for messages
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    stop,
+    setMessages,
+    append,
+  } = useChat({
+    id: chatId,
+    api: '/api/ai',
+    initialMessages,
+    body: {
+      model: selectedModel,
+      maxTokens: 8192,
+      temperature: 0.7,
+      stream: true,
+      webSearchEnabled,
+      arxivMode: selectedWebSearchOption === 'arXiv'
+    },
+    onFinish: async (message) => {
+      console.log('✅ Streaming finished - Message length:', message.content?.length || 0);
+      
+      // Try to extract sources from toolInvocations first
+      let sources = [];
+      if (message.toolInvocations && message.toolInvocations.length > 0) {
+        for (const invocation of message.toolInvocations) {
+          const inv = invocation as any; // Type assertion for tool invocation result
+          if (inv.result && inv.result.results) {
+            sources = inv.result.results;
+            console.log('🔍 Found', sources.length, 'sources from', inv.toolName);
+            break;
+          }
+        }
+      }
+      
+      // Fallback to global state (set by tools)
+      if (sources.length === 0) {
+        sources = (global as any)?.lastSearchResults || [];
+        if (sources.length > 0) {
+          console.log('🔍 Using', sources.length, 'sources from global state');
+        }
+      }
+      
+      // Store sources for this specific message
+      if (!((global as any).messageSourcesMap)) {
+        (global as any).messageSourcesMap = {};
+      }
+      if (sources.length > 0) {
+        (global as any).messageSourcesMap[message.id] = sources;
+        setCurrentSources(sources);
+        console.log('✅ Stored', sources.length, 'sources for message');
+      }
+      
+      // Clean up old message sources to prevent memory leaks (keep only last 20)
+      const messageSourcesMap = (global as any).messageSourcesMap;
+      const messageIds = Object.keys(messageSourcesMap);
+      if (messageIds.length > 20) {
+        messageIds.slice(0, messageIds.length - 20).forEach(id => {
+          delete messageSourcesMap[id];
+        });
+      }
+      
+      // Save to Supabase in background - use ref for current conversation ID
+      const currentConvId = currentConversationIdRef.current;
+      if (user?.id && currentConvId) {
+                        // Use immediate async instead of setTimeout to avoid memory leaks
+                (async () => {
+                  try {
+                    await fetch(`/api/conversations/${currentConvId}/messages`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        content: message.content,
+                        role: 'assistant',
+                        metadata: { 
+                          model_used: selectedModel,
+                          sources: sources,
+                          webSearchEnabled,
+                          arxivMode: selectedWebSearchOption === 'arXiv'
+                        }
+                      })
+                    });
+                    console.log('✅ Saved AI message to Supabase');
+                  } catch (error) {
+                    console.error('❌ Error saving AI message:', error);
+                  }
+                })();
+      } else {
+        console.log('⚠️ Not saving AI message - user:', !!user?.id, 'conversationId:', currentConvId);
+      }
+    },
+
+    onError: (error) => {
+      console.error('❌ Chat error:', error);
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2));
+      setAiError(`AI error: ${error.message || 'Currently unavailable. Please retry.'}`);
+    }
+  });
+
+
 
   // Check if AI response suggests switching to web mode
   const checkForWebModeSuggestion = (aiResponse: string) => {
@@ -187,16 +301,21 @@ function ConversationContent() {
     return `/${iconFolder}/${iconName}.svg`;
   };
 
+  const conversationContainerRef = useRef<HTMLDivElement>(null);
+
   const scrollToBottom = () => {
-    // Use requestAnimationFrame to ensure DOM has updated before scrolling
-    requestAnimationFrame(() => {
-      conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    });
+    // Simple, immediate scroll to bottom - no complex logic
+    setTimeout(() => {
+      conversationEndRef.current?.scrollIntoView({ behavior: "auto" });
+    }, 50);
   };
 
+  // Auto-scroll when messages change - simple approach
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages.length, isLoading]); // Scroll on new messages and when loading state changes
 
   // Auto-focus textarea when user starts typing
   useEffect(() => {
@@ -226,10 +345,10 @@ function ConversationContent() {
         return;
       }
 
-      // If it's a printable character, focus the textarea and add the character
+      // If it's a printable character, focus the textarea 
       if (e.key.length === 1 && textareaRef.current) {
         textareaRef.current.focus();
-        setInputValue(prev => prev + e.key);
+        // useChat will handle the input value
         e.preventDefault();
       }
     };
@@ -336,25 +455,91 @@ function ConversationContent() {
       return; // Wait for auth to be determined
     }
     
-    // If we have a conversation ID, load the conversation
-    if (conversationId && user?.id && !initialMessageHandledRef.current) {
-      console.log('Loading conversation:', conversationId);
+    // Load existing conversation
+    if (conversationId && user?.id && !conversationLoadedRef.current) {
+      console.log('📱 Loading existing conversation:', conversationId);
       loadConversation(conversationId);
+      conversationLoadedRef.current = true;
       initialMessageHandledRef.current = true;
     } 
-    // If we have an initial message, auto-send it (only after auth status is known AND model is initialized)
-    else if (initialMessage && !initialMessageHandledRef.current && modelInitialized) {
+    // Auto-send initial message for new conversations
+    else if (initialMessage && !initialMessageHandledRef.current && modelInitialized && !conversationId) {
+      console.log('🚀 Auto-sending initial message:', initialMessage);
       initialMessageHandledRef.current = true;
       
-      // Auto-send the initial message directly
-      setTimeout(() => {
-        handleSendWithMessage(initialMessage);
+      // Set the input value and trigger send to create conversation
+      setTimeout(async () => {
+        // Simulate setting the input and sending
+        const event = new Event('submit') as any;
+        event.preventDefault = () => {};
+        
+        // We need to manually set the input for the initial message
+        // Since useChat manages input, we'll call append with conversation creation
+        const messageText = initialMessage;
+        
+        // Create conversation first for initial messages
+        if (user?.id) {
+          try {
+            console.log('🆕 Creating conversation for initial message...');
+            const { SupabaseService } = await import('@/lib/supabase-service');
+            const title = await SupabaseService.generateConversationTitle(messageText);
+            
+            const response = await fetch('/api/conversations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title,
+                model_name: selectedModel,
+                user_id: user.id
+              })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const newConversationId = data.conversation.id;
+              
+              console.log('✅ Created conversation for initial message:', newConversationId);
+              
+              // Update ref immediately so onFinish can use it
+              currentConversationIdRef.current = newConversationId;
+              
+              // Update URL
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.set('id', newConversationId);
+              newUrl.searchParams.delete('message');
+              window.history.replaceState({}, '', newUrl.toString());
+              
+              // Save user message
+              setTimeout(async () => {
+                try {
+                  await fetch(`/api/conversations/${newConversationId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      content: messageText,
+                      role: 'user',
+                      metadata: {}
+                    })
+                  });
+                  console.log('✅ Saved initial user message');
+                } catch (error) {
+                  console.error('❌ Error saving initial user message:', error);
+                }
+              }, 100);
+            }
+          } catch (error) {
+            console.error('❌ Error creating conversation for initial message:', error);
+          }
+        }
+        
+        // Send the message via useChat
+        append({
+          role: 'user',
+          content: initialMessage
+        });
+        
+        // Scroll handled by useEffect
       }, 100);
-    }
-    // Clear messages if no conversation ID and no initial message
-    else if (!conversationId && !initialMessage && user?.id) {
-      setMessages([]);
-      // Conversation title is not needed for this implementation
     }
   }, [searchParams, user?.id, authLoading, modelInitialized]); // Removed handleSendWithMessage from dependencies to prevent infinite loop
 
@@ -382,86 +567,74 @@ function ConversationContent() {
 
 
 
-  // Load conversation from Supabase
   const loadConversation = async (conversationId: string) => {
     try {
-      // Use API route to get conversation
+      console.log('🔍 Loading conversation:', conversationId);
+      // Update ref when loading existing conversation
+      currentConversationIdRef.current = conversationId;
       const response = await fetch(`/api/conversations/${conversationId}`);
       if (response.ok) {
         const data = await response.json();
         const conversation = data.conversation;
         
-        console.log('🔍 Loaded conversation data:', {
-          id: conversation.id,
-          title: conversation.title,
-          model_name: conversation.model_name,
-          model_id: conversation.model_id,
-          allFields: Object.keys(conversation)
-        });
-        
-        // Preserve URL model if we have one, otherwise use conversation model
+        // Set model from conversation if no URL override
         const urlParams = new URLSearchParams(window.location.search);
         const urlModel = urlParams.get('model');
-        
         if (urlModel) {
-          const decodedUrlModel = decodeURIComponent(urlModel);
-          console.log('Preserving URL model over conversation model:', decodedUrlModel);
-          setSelectedModel(decodedUrlModel);
+          setSelectedModel(decodeURIComponent(urlModel));
         } else {
-          const conversationModel = conversation.model_name || 'GPT-OSS 120B';
-          console.log('Setting model from existing conversation:', conversationModel, 'Raw value:', conversation.model_name);
-          setSelectedModel(conversationModel);
+          setSelectedModel(conversation.model_name || 'GPT-OSS 120B');
         }
         
-        // Clear existing messages first
-        setMessages([]);
+        // Convert to useChat format and extract sources
+        const chatMessages = conversation.messages
+          .map((msg: any) => ({
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+            metadata: msg.metadata
+          }))
+          .sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
         
-        // Map and sort messages to ensure proper chronological order
-        const loadedMessages = conversation.messages
-          .map((msg: { id: string; content: string; role: string; created_at: string; metadata?: { model_used?: string; sources?: unknown[]; reasoning?: unknown; rawResponse?: unknown } }) => {
-            const messageData = {
-              id: msg.id,
-              text: msg.content,
-              isUser: msg.role === 'user',
-              timestamp: msg.created_at,
-              model: msg.metadata?.model_used, // Load model from metadata
-              sources: msg.metadata?.sources || [], // Load sources from metadata
-              reasoning: msg.metadata?.reasoning, // Load reasoning data
-              rawResponse: msg.metadata?.rawResponse // Load raw response data
-            };
-            
-            // Debug: Log sources loading
-            if (messageData.sources && messageData.sources.length > 0) {
-              console.log('🔍 Loaded sources for message:', {
-                messageId: msg.id,
-                sourcesCount: messageData.sources.length,
-                sources: messageData.sources
-              });
-            }
-            
-            return messageData;
-          })
-          .sort((a: { timestamp: string }, b: { timestamp: string }) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        // Load sources into messageSourcesMap for each message
+        if (!((global as any).messageSourcesMap)) {
+          (global as any).messageSourcesMap = {};
+        }
         
-        setMessages(loadedMessages);
+        let latestSources: any[] = [];
+        chatMessages.forEach((msg: any) => {
+          if (msg.role === 'assistant' && msg.metadata?.sources?.length > 0) {
+            (global as any).messageSourcesMap[msg.id] = msg.metadata.sources;
+            latestSources = msg.metadata.sources; // Keep track of latest sources
+            console.log('🔍 Loaded sources for message:', msg.id, '- count:', msg.metadata.sources.length);
+          }
+        });
+        
+        // Set the latest sources as current sources
+        if (latestSources.length > 0) {
+          setCurrentSources(latestSources);
+          console.log('🔍 Set current sources from conversation:', latestSources.length);
+        }
+        
+        console.log('✅ Loaded messages for useChat:', chatMessages.length);
+        setInitialMessages(chatMessages);
       } else {
-        console.error('Failed to load conversation:', await response.text());
-        return;
+        console.error('❌ Failed to load conversation');
       }
     } catch (error) {
-      console.error('Error loading conversation:', error);
-      return;
+      console.error('❌ Error loading conversation:', error);
     }
   };
 
-  // Auto-resize textarea when inputValue changes
+  // Auto-resize textarea when input changes
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px';
     }
-  }, [inputValue]);
+  }, [input]);
 
+  /* DISABLED OLD FUNCTION - USING useChat NOW
   const handleAIResponse = async (userMessageText: string, userMessageObj: Message, conversationId?: string) => {
     try {
       setAiError(null); // Clear any previous errors
@@ -469,7 +642,7 @@ function ConversationContent() {
       // Validate userMessageObj
       if (!userMessageObj || !userMessageObj.timestamp) {
         setAiError('Invalid message object. Please try again.');
-        setIsLoading(false);
+
         return;
       }
       
@@ -627,7 +800,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
       } catch {
         // Both AI and simulation failed
         setAiError('AI is currently unavailable. Your message has been saved and you can retry.');
-        setIsLoading(false);
+
         return; // Exit without creating AI response
       }
 
@@ -642,7 +815,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
         return [...currentMessages, aiResponse];
       });
       
-      setIsLoading(false);
+
 
       // Save AI response to database if user is authenticated and conversation exists
       // Use passed conversationId or fallback to URL params
@@ -684,12 +857,14 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
 
     } catch (error) {
       setAiError('Failed to get AI response. Please try again.');
-      setIsLoading(false);
+
     }
   };
+  */
 
-  const handleSendMessage = async (messageOverride?: string) => {
-    const messageText = messageOverride || inputValue.trim();
+  /* DISABLED OLD FUNCTION - USING useChat NOW
+  const handleSendMessage_OLD = async (messageOverride?: string) => {
+    const messageText = messageOverride || input.trim();
     if (!messageText || isLoading) return;
 
     // Clear any previous AI errors
@@ -715,11 +890,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
       timestamp: new Date(now).toISOString()
     };
 
-    // Clear input only if we're using the input value (not override)
-    if (!messageOverride) {
-      setInputValue('');
-    }
-    setIsLoading(true);
+    // useChat handles input clearing automatically
+
 
     // Add user message simply
     setMessages(currentMessages => [...currentMessages, userMessage]);
@@ -852,17 +1024,13 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
     setTimeout(() => {
       handleAIResponse(messageText, userMessage, conversationId || undefined);
     }, 100);
-  };
-
-  // Button click handler
-  const handleSend = () => {
-    handleSendMessage();
-  };
+  }; // END OF OLD FUNCTION - TO BE REMOVED
+  */
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      handleSend();
     }
   };
 
@@ -887,6 +1055,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
     router.push('/');
   };
 
+  /* DISABLED OLD FUNCTION - USING useChat NOW
   const handleRedoMessage = async (messageIndex: number) => {
     // Validate message index
     if (messageIndex < 0 || messageIndex >= messages.length) {
@@ -908,7 +1077,7 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
     if (!userMessage || !userMessage.isUser) return;
 
     // Set loading state
-    setIsLoading(true);
+
 
     const conversationId = searchParams.get('id');
 
@@ -943,6 +1112,101 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
       handleAIResponse(userMessage.text, userMessage, conversationId || undefined);
     }, 100);
   };
+  */
+
+  // Send handler with conversation creation
+  const handleSend = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!input.trim() || isLoading) return;
+    
+    const messageText = input.trim();
+    
+    // Create conversation if it doesn't exist and user is authenticated
+    if (!conversationId && user?.id) {
+      try {
+        console.log('🆕 Creating new conversation...');
+        
+        // Generate title from first message
+        const { SupabaseService } = await import('@/lib/supabase-service');
+        const title = await SupabaseService.generateConversationTitle(messageText);
+        
+        const response = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            model_name: selectedModel,
+            user_id: user.id
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const newConversationId = data.conversation.id;
+          
+          console.log('✅ Created conversation:', newConversationId);
+          
+          // Update ref immediately so onFinish can use it
+          currentConversationIdRef.current = newConversationId;
+          
+          // Update URL with new conversation ID
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('id', newConversationId);
+          newUrl.searchParams.delete('message'); // Remove initial message param
+          window.history.replaceState({}, '', newUrl.toString());
+          
+          // Save the user message after conversation creation
+          setTimeout(async () => {
+            try {
+              await fetch(`/api/conversations/${newConversationId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  content: messageText,
+                  role: 'user',
+                  metadata: {}
+                })
+              });
+              console.log('✅ Saved user message to new conversation');
+            } catch (error) {
+              console.error('❌ Error saving user message to new conversation:', error);
+            }
+          }, 100);
+        } else {
+          console.error('❌ Failed to create conversation:', await response.text());
+        }
+      } catch (error) {
+        console.error('❌ Error creating conversation:', error);
+      }
+    }
+    // Save user message to existing conversation
+    else if (user?.id && conversationId) {
+      setTimeout(async () => {
+        try {
+          await fetch(`/api/conversations/${conversationId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: messageText,
+              role: 'user',
+              metadata: {}
+            })
+          });
+          console.log('✅ Saved user message to existing conversation');
+        } catch (error) {
+          console.error('❌ Error saving user message:', error);
+        }
+      }, 100);
+    }
+    
+    // Clear sources when sending new message (will be updated if new sources found)
+    setCurrentSources([]);
+    
+    // Let useChat handle the streaming
+    handleSubmit(e);
+    
+    // Scroll handled by useEffect
+  };
 
   return (
     <div className="homepage-container">
@@ -960,32 +1224,78 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
       
       <main className="conversation-main-content">
         {/* Conversation Container */}
-        <div className="conversation-container">
+        <div className="conversation-container" ref={conversationContainerRef}>
           <div className="conversation-thread">
             
-            {messages.map((message, index) => (
-              <ChatMessage
-                key={message.id}
-                content={message.text}
-                isUser={message.isUser}
-                model={message.model} // Pass model to ChatMessage
-                rawResponse={message.rawResponse} // Pass raw response for XAI models
-                reasoning={message.reasoning} // Pass captured reasoning data
-                sources={message.sources} // Pass web search sources
-                onRedo={!message.isUser ? () => handleRedoMessage(index) : undefined}
-                onSourcesClick={() => {
-                  if (message.sources && message.sources.length > 0) {
-                    // Toggle sidebar: if already open, close it; otherwise open it
-                    if (isSourcesOpen) {
-                      setIsSourcesOpen(false);
-                    } else {
-                      setCurrentSources(message.sources);
-                      setIsSourcesOpen(true);
+            {/* Display messages from useChat - single source of truth */}
+            {messages.map((message, index) => {
+              // Get sources for this specific message
+              const messageSources = message.role === 'assistant' ? 
+                // For the latest message, use currentSources (live during streaming)
+                (index === messages.length - 1 && currentSources.length > 0 ? currentSources : 
+                // For older messages, try to get from global lastSearchResults or use currentSources
+                (global as any)?.messageSourcesMap?.[message.id] || []) : undefined;
+              
+              // Check if this message is currently being streamed (last assistant message + isLoading)
+              const isCurrentlyStreaming = message.role === 'assistant' && 
+                                         index === messages.length - 1 && 
+                                         isLoading;
+              
+              // Debug logging for sources and buttons (comment out to reduce console spam)
+              // if (message.role === 'assistant') {
+              //   console.log(`🔍 Debug: Message ${message.id}:`, {
+              //     sourcesCount: messageSources?.length || 0,
+              //     sources: messageSources,
+              //     isStreaming: isCurrentlyStreaming,
+              //     hasOnRedo: !!(!isCurrentlyStreaming),
+              //     messageIndex: index,
+              //     totalMessages: messages.length
+              //   });
+              // }
+              
+              return (
+                                  <ChatMessage
+                  key={message.id}
+                  content={message.content}
+                  isUser={message.role === 'user'}
+                  model={selectedModel}
+                  sources={messageSources}
+                  onRedo={message.role === 'assistant' && !isCurrentlyStreaming ? () => {
+                    // Regenerate the assistant message by removing it and re-submitting
+                    console.log('🔄 Regenerating message:', message.id);
+                    const messageIndex = messages.findIndex(m => m.id === message.id);
+                    if (messageIndex > 0) {
+                      // Remove this assistant message and regenerate
+                      const updatedMessages = messages.slice(0, messageIndex);
+                      setMessages(updatedMessages);
+                      
+                      // Find the user message before this assistant message
+                      const userMessage = messages[messageIndex - 1];
+                      if (userMessage && userMessage.role === 'user') {
+                        // Re-submit the user message to trigger regeneration
+                        setTimeout(() => {
+                          append({
+                            role: 'user',
+                            content: userMessage.content
+                          });
+                        }, 100);
+                      }
                     }
-                  }
-                }}
-              />
-            ))}
+                  } : undefined}
+                  onSourcesClick={() => {
+                    if (messageSources && messageSources.length > 0) {
+                      setCurrentSources(messageSources);
+                      // Toggle sidebar: if already open, close it; otherwise open it
+                      if (isSourcesOpen) {
+                        setIsSourcesOpen(false);
+                      } else {
+                        setIsSourcesOpen(true);
+                      }
+                    }
+                  }}
+                />
+              );
+            })}
             
             {/* Web Mode Suggestion */}
             {showWebModeSuggestion && !webSearchEnabled && (
@@ -1054,13 +1364,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                     <button 
                       onClick={() => {
                         setAiError(null);
-                        const lastUserMessage = messages.filter(m => m.isUser).pop();
-                        if (lastUserMessage) {
-                          setIsLoading(true);
-                          setTimeout(() => {
-                            handleAIResponse(lastUserMessage.text, lastUserMessage);
-                          }, 100);
-                        }
+                        // TODO: Implement retry with useChat
+                        console.log('Retry clicked - implement with useChat reload');
                       }}
                       style={{
                         marginLeft: '10px',
@@ -1090,8 +1395,8 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
             <div className="input-container conversation-input-container">
               <textarea
                 ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                value={input}
+                onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
                 placeholder="Message Qurse..."
                 className="main-input conversation-input"
@@ -1297,9 +1602,9 @@ Always provide a helpful answer first, then suggest the mode switch if it would 
                 <button
                   type="button"
                   onClick={handleSend}
-                  className={`input-btn send-btn ${inputValue.trim() ? 'active' : ''}`}
+                  className={`input-btn send-btn ${input.trim() ? 'active' : ''}`}
                   title="Send message"
-                  disabled={!inputValue.trim() || isLoading}
+                  disabled={!input.trim() || isLoading}
                 >
                   <Image src={getIconSrc("send")} alt="Send" width={16} height={16} className="icon-sm" />
                 </button>

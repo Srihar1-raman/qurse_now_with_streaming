@@ -28,12 +28,12 @@ interface TableProps {
   children: React.ReactNode;
 }
 
-// Enhanced Code Block Component
-const CodeBlock = ({ language, children }: CodeBlockProps) => {
+// Enhanced Code Block Component - Memoized for performance
+const CodeBlock = React.memo(({ language, children }: CodeBlockProps) => {
   const [copied, setCopied] = useState(false);
   const { resolvedTheme } = useTheme();
 
-  const handleCopy = async () => {
+  const handleCopy = React.useCallback(async () => {
     try {
       await navigator.clipboard.writeText(children);
       setCopied(true);
@@ -41,7 +41,7 @@ const CodeBlock = ({ language, children }: CodeBlockProps) => {
     } catch (err) {
       console.error('Failed to copy code:', err);
     }
-  };
+  }, [children]);
 
   return (
     <div className="enhanced-code-block">
@@ -56,36 +56,57 @@ const CodeBlock = ({ language, children }: CodeBlockProps) => {
         </button>
       </div>
       <div className="code-content">
-        <SyntaxHighlighter
-          language={language || 'text'}
-          style={resolvedTheme === 'dark' ? oneDark : oneLight}
-          customStyle={{
-            margin: 0,
-            borderRadius: '0 0 8px 8px',
-            fontSize: '0.875rem',
-            lineHeight: '1.5',
-          }}
-          showLineNumbers={true}
-          lineNumberStyle={{
-            color: 'var(--color-text-secondary)',
-            paddingRight: '1rem',
-            minWidth: '2.5rem',
-            textAlign: 'right',
-            userSelect: 'none',
-            fontSize: '0.75rem',
-          }}
-          PreTag={({ children, ...props }) => (
-            <pre {...props} className="syntax-highlighter-pre">
-              {children}
-            </pre>
-          )}
-        >
-          {children}
-        </SyntaxHighlighter>
+        {children.length > 2000 ? (
+          // For large code blocks, use simple pre instead of SyntaxHighlighter
+          <pre 
+            className="simple-code-block"
+            style={{
+              margin: 0,
+              borderRadius: '0 0 8px 8px',
+              fontSize: '0.875rem',
+              lineHeight: '1.5',
+              backgroundColor: resolvedTheme === 'dark' ? '#1e1e1e' : '#f8f8f8',
+              color: resolvedTheme === 'dark' ? '#d4d4d4' : '#333',
+              padding: '1rem',
+              overflow: 'auto',
+              whiteSpace: 'pre',
+            }}
+          >
+            {children}
+          </pre>
+        ) : (
+          <SyntaxHighlighter
+            language={language || 'text'}
+            style={resolvedTheme === 'dark' ? oneDark : oneLight}
+            customStyle={{
+              margin: 0,
+              borderRadius: '0 0 8px 8px',
+              fontSize: '0.875rem',
+              lineHeight: '1.5',
+            }}
+            showLineNumbers={children.split('\n').length > 3} // Only show line numbers for longer code
+            lineNumberStyle={{
+              color: 'var(--color-text-secondary)',
+              paddingRight: '1rem',
+              minWidth: '2.5rem',
+              textAlign: 'right',
+              userSelect: 'none',
+              fontSize: '0.75rem',
+            }}
+            PreTag={({ children, ...props }) => (
+              <pre {...props} className="syntax-highlighter-pre">
+                {children}
+              </pre>
+            )}
+            wrapLongLines={false} // Disable wrapping for better performance
+          >
+            {children}
+          </SyntaxHighlighter>
+        )}
       </div>
     </div>
   );
-};
+});
 
 // Enhanced Inline Code Component
 const InlineCode = ({ children }: InlineCodeProps) => {
@@ -163,14 +184,23 @@ interface MarkdownRendererProps {
 
 export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   const { resolvedTheme } = useTheme();
+  
+  // Performance optimization: efficient content processing
 
-  // Scira's LaTeX extraction approach
+  // Optimized LaTeX extraction - only process if content contains LaTeX
   const { processedContent, latexBlocks } = useMemo(() => {
-    const citations: any[] = [];
+    // Quick check if content contains LaTeX patterns before heavy processing
+    const hasLatex = /(\$\$|\\\[|\\\(|\$[^$]+\$)/.test(content);
+    
+    if (!hasLatex) {
+      // Skip heavy processing if no LaTeX detected
+      return { processedContent: content, latexBlocks: [] };
+    }
+
     const latexBlocks: Array<{ id: string; content: string; isBlock: boolean }> = [];
     let modifiedContent = content;
 
-    // First, extract and protect code blocks to prevent LaTeX processing inside them
+    // Only extract code blocks if needed (when LaTeX is present)
     const codeBlocks: Array<{ id: string; content: string }> = [];
     const codeBlockPatterns = [
       /```[\s\S]*?```/g, // Fenced code blocks
@@ -185,8 +215,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       });
     });
 
-    // Then extract and protect LaTeX blocks
-    // Extract block equations first (they need to be standalone)
+    // Extract LaTeX blocks
     const blockPatterns = [
       { pattern: /\\\[([\s\S]*?)\\\]/g, isBlock: true },
       { pattern: /\$\$([\s\S]*?)\$\$/g, isBlock: true },
@@ -200,7 +229,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       });
     });
 
-    // Process LaTeX patterns
+    // Process inline LaTeX
     const inlinePatterns = [
       { pattern: /\\\(([\s\S]*?)\\\)/g, isBlock: false },
       { pattern: /\$(?![{#])[^\$\n]+?\$/g, isBlock: false },
@@ -214,7 +243,7 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       });
     });
 
-    // Restore protected code blocks
+    // Restore code blocks
     codeBlocks.forEach(({ id, content }) => {
       modifiedContent = modifiedContent.replace(id, content);
     });
@@ -222,9 +251,15 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
     return { processedContent: modifiedContent, latexBlocks };
   }, [content]);
 
-  // Handle empty content
+  // Handle empty content - show loading state instead of ugly message
   if (!content || content.trim() === '') {
-    return <div className={`markdown-renderer empty ${className}`}>No content to render</div>;
+    return <div className={`markdown-renderer empty ${className}`} style={{ 
+      color: 'var(--color-text-secondary)', 
+      fontStyle: 'italic',
+      fontSize: '0.9rem'
+    }}>
+      Generating response...
+    </div>;
   }
 
   const generateKey = () => {

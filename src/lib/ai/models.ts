@@ -58,7 +58,6 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         temperature: 0.7,
         supportsTools: true
       },
-
       {
         id: 'llama-3.3-70b-versatile',
         name: 'Llama 3.3 70B Versatile',
