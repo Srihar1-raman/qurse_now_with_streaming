@@ -7,7 +7,6 @@ export interface AIModel {
   temperature?: number;
   imageSupport?: boolean;
   reasoningModel?: boolean;
-  supportsTools?: boolean;
 }
 
 export interface ChatMessage {
@@ -42,17 +41,4 @@ export interface ParsedResponse {
 // Provider configurations
 export interface ProviderConfig {
   [key: string]: any;
-}
-
-// Tool calling interfaces
-export interface ToolCallOptions {
-  model: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-  maxTokens?: number;
-  temperature?: number;
-  webSearchEnabled?: boolean;
-  arxivMode?: boolean;
-  customInstructions?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
 } 

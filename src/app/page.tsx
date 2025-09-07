@@ -15,7 +15,6 @@ export default function Home() {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [modelSearchQuery, setModelSearchQuery] = useState('');
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [selectedWebSearchOption, setSelectedWebSearchOption] = useState('Chat');
   const [isWebSearchDropdownOpen, setIsWebSearchDropdownOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -23,21 +22,12 @@ export default function Home() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Web search options
+  // Web search options (UI only - functionality disabled)
   const webSearchOptions = [
     { name: 'Chat', enabled: false },
-    { name: 'Web Search (Exa)', enabled: true },
-    { name: 'arXiv', enabled: false }
+    { name: 'Web Search (Exa)', enabled: false }, // Disabled
+    { name: 'arXiv', enabled: false } // Disabled
   ];
-
-  // Initialize web search enabled based on selected option
-  useEffect(() => {
-    if (selectedWebSearchOption === 'Web Search (Exa)' || selectedWebSearchOption === 'arXiv') {
-      setWebSearchEnabled(true);
-    } else {
-      setWebSearchEnabled(false);
-    }
-  }, [selectedWebSearchOption]);
 
   // Get all available models from enabled groups
   const getAvailableModels = () => {
@@ -59,26 +49,6 @@ export default function Home() {
 
   const availableModels = getAvailableModels();
 
-  // Helper function to check if model is compatible with arxiv mode
-  const isModelCompatibleWithArxiv = (modelName: string, provider: string) => {
-    // For arxiv mode, only allow specific models
-    if (selectedWebSearchOption === 'arXiv') {
-      const compatibleModels = [
-        'GPT-OSS 120B',
-        'GPT-OSS 20B',
-        'Qwen3 32B',
-        'Deepseek R1 Distill 70B',
-        'Llama 4 Scout 17B',
-        'Kimi K2 Instruct'
-      ];
-      
-      const compatibleProviders = ['XAI', 'OpenAI', 'Anthropic'];
-      
-      return compatibleModels.includes(modelName) || compatibleProviders.includes(provider);
-    }
-    return true; // All models allowed for non-arxiv modes
-  };
-
   // Filter models based on search query
   const getFilteredModelGroups = () => {
     if (!modelSearchQuery.trim()) {
@@ -88,7 +58,7 @@ export default function Home() {
           ...group,
           models: group.models.map(model => ({
             ...model,
-            disabled: !isModelCompatibleWithArxiv(model.name, group.provider)
+            disabled: false // All models enabled for basic chat
           }))
         }));
     }
@@ -103,10 +73,10 @@ export default function Home() {
             model.name.toLowerCase().includes(query) ||
             group.provider.toLowerCase().includes(query)
           )
-          .map(model => ({
-            ...model,
-            disabled: !isModelCompatibleWithArxiv(model.name, group.provider)
-          }))
+        .map(model => ({
+          ...model,
+          disabled: false // All models enabled for basic chat
+        }))
       }))
       .filter(group => group.models.length > 0);
   };
@@ -177,19 +147,12 @@ export default function Home() {
 
   const handleSend = () => {
     if (inputValue.trim()) {
-      // Navigate to conversation page with the message, selected model, and web search state
+      // Navigate to conversation page with the message and selected model (basic chat only)
       const encodedMessage = encodeURIComponent(inputValue.trim());
       const encodedModel = encodeURIComponent(selectedModel);
       
-      let searchParam = '';
-      if (selectedWebSearchOption === 'Web Search (Exa)') {
-        searchParam = '&webSearch=true';
-      } else if (selectedWebSearchOption === 'arXiv') {
-        searchParam = '&webSearch=true&arxivMode=true';
-      }
-      
-      // Use router.push but ensure proper parameter handling
-      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}${searchParam}`;
+      // Use router.push for basic chat mode
+      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}`;
       console.log('Navigating to:', url);
       router.push(url);
     }
@@ -203,40 +166,31 @@ export default function Home() {
 
   const handleDeepSearch = () => {
     if (inputValue.trim()) {
-      // Navigate to conversation page with the message, selected model, and appropriate search mode
+      // Navigate to conversation page with the message and selected model (basic chat only)
       const encodedMessage = encodeURIComponent(inputValue.trim());
       const encodedModel = encodeURIComponent(selectedModel);
       
-      let searchParam = '';
-      if (selectedWebSearchOption === 'Web Search (Exa)') {
-        searchParam = '&webSearch=true';
-      } else if (selectedWebSearchOption === 'arXiv') {
-        searchParam = '&webSearch=true&arxivMode=true';
-      }
-      
-      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}${searchParam}`;
+      const url = `/conversation?message=${encodedMessage}&model=${encodedModel}`;
       console.log('Navigating to deep search:', url);
       router.push(url);
     }
-  };
-
-  const handleInternetSearch = () => {
-    setWebSearchEnabled(!webSearchEnabled);
   };
 
   const handleHistoryClick = () => {
     setIsHistoryOpen(true);
   };
 
-  // Close dropdown when clicking outside and prevent page scroll
+  // Handle click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (!isModelDropdownOpen && !isWebSearchDropdownOpen) return;
+
       const modelSelectors = document.querySelectorAll('.model-selector');
-      
+
       // Check if click is outside all model selectors
       let clickedInsideModelSelector = false;
       let clickedInsideWebSearchSelector = false;
-      
+
       modelSelectors.forEach((selector, index) => {
         if (selector.contains(event.target as Node)) {
           if (index === 0) {
@@ -246,22 +200,34 @@ export default function Home() {
           }
         }
       });
-      
+
       if (!clickedInsideModelSelector) {
         setIsModelDropdownOpen(false);
         setModelSearchQuery('');
       }
-      
+
       if (!clickedInsideWebSearchSelector) {
         setIsWebSearchDropdownOpen(false);
       }
     };
 
+    // Only add event listeners if dropdowns are open
+    if (isModelDropdownOpen || isWebSearchDropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [isModelDropdownOpen, isWebSearchDropdownOpen]);
+
+  // Separate effect for scroll prevention (no state modifications)
+  useEffect(() => {
     const handleWheel = (event: WheelEvent) => {
       if (isModelDropdownOpen || isWebSearchDropdownOpen) {
         const modelDropdowns = document.querySelectorAll('.model-dropdown-enhanced');
         const dropdownContent = document.querySelector('.model-dropdown-content');
-        
+
         // Check if event is inside any dropdown
         let isInsideDropdown = false;
         modelDropdowns.forEach(dropdown => {
@@ -269,14 +235,14 @@ export default function Home() {
             isInsideDropdown = true;
           }
         });
-        
+
         // If the event is not inside any dropdown, prevent it completely
         if (!isInsideDropdown) {
           event.preventDefault();
           event.stopPropagation();
           return false;
         }
-        
+
         // If inside dropdown content, let it scroll but prevent propagation
         if (dropdownContent && dropdownContent.contains(event.target as Node)) {
           event.stopPropagation();
@@ -287,7 +253,7 @@ export default function Home() {
     const handleTouchMove = (event: TouchEvent) => {
       if (isModelDropdownOpen || isWebSearchDropdownOpen) {
         const modelDropdowns = document.querySelectorAll('.model-dropdown-enhanced');
-        
+
         // Check if event is inside any dropdown
         let isInsideDropdown = false;
         modelDropdowns.forEach(dropdown => {
@@ -295,7 +261,7 @@ export default function Home() {
             isInsideDropdown = true;
           }
         });
-        
+
         if (!isInsideDropdown) {
           event.preventDefault();
           event.stopPropagation();
@@ -307,7 +273,7 @@ export default function Home() {
     const handleKeydown = (event: KeyboardEvent) => {
       if ((isModelDropdownOpen || isWebSearchDropdownOpen) && (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'PageUp' || event.key === 'PageDown' || event.key === 'Home' || event.key === 'End')) {
         const modelDropdowns = document.querySelectorAll('.model-dropdown-enhanced');
-        
+
         // Check if event is inside any dropdown
         let isInsideDropdown = false;
         modelDropdowns.forEach(dropdown => {
@@ -315,7 +281,7 @@ export default function Home() {
             isInsideDropdown = true;
           }
         });
-        
+
         if (!isInsideDropdown) {
           event.preventDefault();
           event.stopPropagation();
@@ -325,11 +291,10 @@ export default function Home() {
     };
 
     if (isModelDropdownOpen || isWebSearchDropdownOpen) {
-      document.addEventListener('click', handleClickOutside);
       document.addEventListener('wheel', handleWheel, { passive: false, capture: true });
       document.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true });
       document.addEventListener('keydown', handleKeydown, { passive: false, capture: true });
-      
+
       // Additional aggressive prevention
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
@@ -341,20 +306,19 @@ export default function Home() {
       document.body.style.width = '';
       document.documentElement.style.overflow = '';
     }
-    
+
     return () => {
-      document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('wheel', handleWheel);
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('keydown', handleKeydown);
-      
+
       // Always restore on cleanup
       document.body.style.overflow = '';
       document.body.style.position = '';
       document.body.style.width = '';
       document.documentElement.style.overflow = '';
     };
-  }, [isModelDropdownOpen]);
+  }, [isModelDropdownOpen, isWebSearchDropdownOpen]);
 
   // Show loading skeleton while auth is being determined to prevent flash
   if (authLoading) {
@@ -564,12 +528,6 @@ export default function Home() {
                         key={option.name}
                         onClick={() => {
                           setSelectedWebSearchOption(option.name);
-                          // Update web search enabled based on selection
-                          if (option.name === 'Chat') {
-                            setWebSearchEnabled(false);
-                          } else if (option.name === 'Web Search (Exa)' || option.name === 'arXiv') {
-                            setWebSearchEnabled(true);
-                          }
                           setIsWebSearchDropdownOpen(false);
                         }}
                         className={`model-item-enhanced ${selectedWebSearchOption === option.name ? 'active' : ''}`}

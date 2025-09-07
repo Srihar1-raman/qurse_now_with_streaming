@@ -2,7 +2,6 @@
 export * from './models';
 export * from './providers';
 export * from './service';
-export * from './tools';
 export * from './parsing';
 export * from './fallback';
 
@@ -13,6 +12,5 @@ export type {
   AIResponse,
   ModelGroup,
   ParsedResponse,
-  ProviderConfig,
-  ToolCallOptions
+  ProviderConfig
 } from '@/types/ai'; 

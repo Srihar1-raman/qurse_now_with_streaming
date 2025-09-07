@@ -6059,3 +6059,60 @@ html.dropdown-open {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* Streaming reasoning indicators */
+.reasoning-live-indicator {
+  color: #10b981;
+  animation: reasoningPulse 2s infinite ease-in-out;
+  margin-left: 4px;
+}
+
+.reasoning-streaming-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.streaming-dot {
+  color: #10b981;
+  animation: reasoningPulse 1.5s infinite ease-in-out;
+}
+
+.streaming-text {
+  opacity: 0.8;
+}
+
+/* Enhanced reasoning animations for streaming */
+@keyframes reasoningPulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Auto-collapse animation for reasoning */
+.reasoning-content-simple.collapsing {
+  animation: slideUp 0.5s ease-in forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 1;
+    max-height: 200px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+

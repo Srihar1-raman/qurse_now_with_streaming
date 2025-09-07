@@ -108,6 +108,8 @@ const CodeBlock = React.memo(({ language, children }: CodeBlockProps) => {
   );
 });
 
+CodeBlock.displayName = 'CodeBlock';
+
 // Enhanced Inline Code Component
 const InlineCode = ({ children }: InlineCodeProps) => {
   const [copied, setCopied] = useState(false);
@@ -182,13 +184,18 @@ interface MarkdownRendererProps {
   className?: string;
 }
 
-export default function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
+const MarkdownRenderer = React.memo(function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   const { resolvedTheme } = useTheme();
   
   // Performance optimization: efficient content processing
 
   // Optimized LaTeX extraction - only process if content contains LaTeX
+  // Memoize processed content to prevent re-processing on every render during streaming
   const { processedContent, latexBlocks } = useMemo(() => {
+    // Skip processing if content is empty (during initial streaming)
+    if (!content || content.trim() === '') {
+      return { processedContent: content, latexBlocks: [] };
+    }
     // Quick check if content contains LaTeX patterns before heavy processing
     const hasLatex = /(\$\$|\\\[|\\\(|\$[^$]+\$)/.test(content);
     
@@ -504,4 +511,8 @@ export default function MarkdownRenderer({ content, className = '' }: MarkdownRe
       <Marked renderer={renderer}>{processedContent}</Marked>
     </div>
   );
-}
+});
+
+MarkdownRenderer.displayName = 'MarkdownRenderer';
+
+export default MarkdownRenderer;

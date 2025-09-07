@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient as createSupabaseServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { conversationMessageSchema } from '@/lib/validations/ai'
 
 // POST /api/conversations/[id]/messages - Add message to conversation
 export async function POST(
@@ -45,16 +46,26 @@ export async function POST(
     }
 
     const userId = user.id;
-    const { content, role, metadata } = await request.json()
-    const { id } = await params
+    const body = await request.json();
+    const { id } = await params;
 
-    if (!content || !role) {
-      return NextResponse.json({ error: 'Content and role are required' }, { status: 400 })
+    // Validate request body with Zod
+    const validationResult = conversationMessageSchema.safeParse({
+      ...body,
+      userId
+    });
+    
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Invalid request data', 
+          details: validationResult.error.errors 
+        },
+        { status: 400 }
+      );
     }
 
-    if (!['user', 'assistant', 'system'].includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
-    }
+    const { content, role, metadata } = validationResult.data;
 
     // Verify conversation belongs to user
     const { data: conversation, error: convError } = await supabase
@@ -69,7 +80,7 @@ export async function POST(
     }
 
     // Add message
-    console.log('Adding message to conversation:', id, { content, role, metadata, userId });
+    // Add message to conversation
     const { data: message, error: msgError } = await supabase
       .from('messages')
       .insert({
@@ -89,8 +100,6 @@ export async function POST(
         details: msgError.message || msgError
       }, { status: 500 })
     }
-
-    console.log('Message added successfully:', message);
 
     // Update conversation timestamp
     await supabase

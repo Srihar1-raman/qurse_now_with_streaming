@@ -12,8 +12,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 8192,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'openai/gpt-oss-20b',
@@ -21,8 +20,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 8192,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'deepseek-r1-distill-llama-70b',
@@ -30,8 +28,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 8192,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'qwen/qwen3-32b',
@@ -39,32 +36,28 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 32768,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'gemma2-9b-it',
         name: 'Gemma2 9B',
         provider: 'groq',
         maxTokens: 8192,
-        temperature: 0.7,
-        supportsTools: true
+        temperature: 0.7
       },
       {
         id: 'moonshotai/kimi-k2-instruct',
         name: 'Kimi K2 Instruct',
         provider: 'groq',
         maxTokens: 8192,
-        temperature: 0.7,
-        supportsTools: true
+        temperature: 0.7
       },
       {
         id: 'llama-3.3-70b-versatile',
         name: 'Llama 3.3 70B Versatile',
         provider: 'groq',
         maxTokens: 32768,
-        temperature: 0.7,
-        supportsTools: true
+        temperature: 0.7
       },
       {
         id: 'meta-llama/llama-4-scout-17b-16e-instruct',
@@ -72,8 +65,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 8192,
         temperature: 0.7,
-        imageSupport: true,
-        supportsTools: true
+        imageSupport: true
       },
       {
         id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
@@ -81,16 +73,14 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'groq',
         maxTokens: 8192,
         temperature: 0.7,
-        imageSupport: true,
-        supportsTools: true
+        imageSupport: true
       },
       {
         id: 'llama-3.1-8b-instant',
         name: 'Llama 3.1 8B Instant',
         provider: 'groq',
         maxTokens: 8192,
-        temperature: 0.7,
-        supportsTools: true
+        temperature: 0.7
       }
     ]
   },
@@ -104,8 +94,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'xai',
         maxTokens: 8192,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'grok-2-vision-1212',
@@ -113,16 +102,14 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'xai',
         maxTokens: 8192,
         temperature: 0.7,
-        imageSupport: true,
-        supportsTools: true
+        imageSupport: true
       },
       {
         id: 'grok-3',
         name: 'Grok 3',
         provider: 'xai',
         maxTokens: 8192,
-        temperature: 0.7,
-        supportsTools: true
+        temperature: 0.7
       },
       {
         id: 'grok-4-0709',
@@ -130,8 +117,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'xai',
         maxTokens: 8192,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       }
     ]
   },
@@ -146,8 +132,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         maxTokens: 4096,
         temperature: 0.7,
         imageSupport: true,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'gpt-4.1-2025-04-14',
@@ -155,8 +140,7 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'openai',
         maxTokens: 4096,
         temperature: 0.7,
-        imageSupport: true,
-        supportsTools: true
+        imageSupport: true
       }
     ]
   },
@@ -170,16 +154,14 @@ export const MODEL_GROUPS: Record<string, ModelGroup> = {
         provider: 'anthropic',
         maxTokens: 4096,
         temperature: 0.7,
-        reasoningModel: true,
-        supportsTools: true
+        reasoningModel: true
       },
       {
         id: 'claude-3-haiku-20240307',
         name: 'Claude 3 Haiku',
         provider: 'anthropic',
         maxTokens: 4096,
-        temperature: 0.7,
-        supportsTools: true
+        temperature: 0.7
       }
     ]
   }

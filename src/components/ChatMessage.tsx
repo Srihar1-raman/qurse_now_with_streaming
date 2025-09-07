@@ -14,6 +14,14 @@ interface ChatMessageProps {
   onRedo?: () => void | Promise<void>;
   rawResponse?: any; // Add raw response for XAI models
   reasoning?: any; // Add captured reasoning data
+  parts?: Array<{
+    type: string;
+    text?: string;
+    reasoning?: string;
+    source?: any;
+    toolInvocation?: any;
+    file?: any;
+  }>; // Add message parts for streaming reasoning
   sources?: Array<{
     title: string;
     relevance_score: number;
@@ -28,7 +36,7 @@ interface ChatMessageProps {
   onSourcesClick?: () => void; // Add callback for sources button click
 }
 
-const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, onRedo, rawResponse, reasoning, sources, onSourcesClick }: ChatMessageProps) {
+const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, onRedo, rawResponse, reasoning, parts, sources, onSourcesClick }: ChatMessageProps) {
   const [showReasoning, setShowReasoning] = useState(false);
   const { resolvedTheme, mounted } = useTheme();
 
@@ -51,7 +59,7 @@ const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, on
 
   // Parse reasoning for bot messages from reasoning models
   const shouldParseReasoning = !isUser && model && isReasoningModel(model);
-  
+
   console.log(`🔍 ChatMessage component:`, {
     isUser,
     model,
@@ -60,12 +68,59 @@ const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, on
     rawResponseKeys: rawResponse ? Object.keys(rawResponse) : 'undefined',
     hasReasoningProp: !!reasoning,
     reasoningKeys: reasoning ? Object.keys(reasoning) : 'undefined',
-    reasoningCombinedLength: reasoning?.combinedReasoning?.length || 0
+    reasoningCombinedLength: reasoning?.combinedReasoning?.length || 0,
+    hasParts: !!parts,
+    partsLength: parts?.length || 0
   });
-  
+
+  // Handle message parts for streaming reasoning (new AI SDK approach)
+  const [streamingReasoning, setStreamingReasoning] = useState('');
+  const [streamingText, setStreamingText] = useState('');
+  const [hasFinalAnswerStarted, setHasFinalAnswerStarted] = useState(false);
+
+  // Process parts and update streaming state
+  const [isCollapsing, setIsCollapsing] = useState(false);
+
+  React.useEffect(() => {
+    if (parts && parts.length > 0) {
+      console.log('🔍 Processing message parts:', parts);
+      let reasoningContent = '';
+      let textContent = '';
+      let finalAnswerStarted = false;
+
+      for (const part of parts) {
+        if (part.type === 'reasoning' && part.reasoning) {
+          reasoningContent += part.reasoning;
+        } else if (part.type === 'text' && part.text) {
+          textContent += part.text;
+          finalAnswerStarted = true; // Final answer has started streaming
+        }
+      }
+
+      setStreamingReasoning(reasoningContent);
+      setStreamingText(textContent);
+      setHasFinalAnswerStarted(finalAnswerStarted);
+
+      // Auto-collapse reasoning when final answer starts (like in bio)
+      if (finalAnswerStarted && reasoningContent && showReasoning) {
+        setIsCollapsing(true);
+        setTimeout(() => {
+          setShowReasoning(false);
+          setIsCollapsing(false);
+        }, 1000); // Small delay for smooth UX
+      }
+    }
+  }, [parts, showReasoning]);
+
   // If we have captured reasoning data, use it directly
   let parsedResponse = null;
-  if (reasoning && reasoning.combinedReasoning) {
+  if (streamingReasoning) {
+    parsedResponse = {
+      reasoning: streamingReasoning,
+      finalAnswer: streamingText || content,
+      hasReasoning: true
+    };
+  } else if (reasoning && reasoning.combinedReasoning) {
     parsedResponse = {
       reasoning: reasoning.combinedReasoning,
       finalAnswer: content,
@@ -74,23 +129,13 @@ const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, on
   } else if (shouldParseReasoning) {
     parsedResponse = parseReasoningResponse(content, model, rawResponse);
   }
+
+  // During streaming, auto-show reasoning if it's being streamed and user hasn't manually collapsed
+  const shouldShowReasoningDuringStreaming = streamingReasoning && !hasFinalAnswerStarted && !showReasoning;
   
   const displayContent = parsedResponse?.hasReasoning ? parsedResponse.finalAnswer : content;
   
-  // Performance optimization: Simple debouncing to prevent excessive markdown rendering
-  const [debouncedContent, setDebouncedContent] = useState(content);
-  const [shouldUseMarkdown, setShouldUseMarkdown] = useState(true);
-  
-  React.useEffect(() => {
-    // Disable markdown rendering during rapid content changes (streaming)
-    setShouldUseMarkdown(false);
-    const timer = setTimeout(() => {
-      setDebouncedContent(displayContent);
-      setShouldUseMarkdown(true);
-    }, 150); // Short delay to batch updates
-    
-    return () => clearTimeout(timer);
-  }, [displayContent]);
+  // Always use markdown rendering - no debouncing for real-time formatting
   
 
 
@@ -101,24 +146,30 @@ const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, on
         {/* Simplified Reasoning Section - only for bot messages with reasoning */}
         {!isUser && parsedResponse?.hasReasoning && (
           <div className="reasoning-box">
-            <div 
+            <div
               className="reasoning-toggle-btn"
               onClick={() => setShowReasoning(!showReasoning)}
             >
               <Image src={getIconSrc("reason")} alt="Reasoning" width={12} height={12} className="reasoning-icon" />
-              Reasoning 
-              <Image 
-                src={getIconSrc(showReasoning ? "collapse" : "expand")} 
-                alt={showReasoning ? "Collapse" : "Expand"} 
-                width={12} 
-                height={12} 
-                className="toggle-icon" 
+              Reasoning {streamingReasoning && !hasFinalAnswerStarted && <span className="reasoning-live-indicator">●</span>}
+              <Image
+                src={getIconSrc(showReasoning ? "collapse" : "expand")}
+                alt={showReasoning ? "Collapse" : "Expand"}
+                width={12}
+                height={12}
+                className="toggle-icon"
               />
             </div>
-            
-            {showReasoning && (
-              <div className="reasoning-content-simple">
+
+            {(showReasoning || shouldShowReasoningDuringStreaming) && (
+              <div className={`reasoning-content-simple ${isCollapsing ? 'collapsing' : ''}`}>
                 {parsedResponse.reasoning}
+                {streamingReasoning && !hasFinalAnswerStarted && (
+                  <div className="reasoning-streaming-indicator">
+                    <span className="streaming-dot">●</span>
+                    <span className="streaming-text">Thinking...</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -172,22 +223,8 @@ const ChatMessage = React.memo(function ChatMessage({ content, isUser, model, on
           {isUser ? (
             displayContent
           ) : (
-            // Use simple text during streaming, markdown when stable
-            shouldUseMarkdown ? (
-              <MarkdownRenderer content={debouncedContent} />
-            ) : (
-              // Show plain text during streaming to prevent lag
-              <pre style={{ 
-                whiteSpace: 'pre-wrap', 
-                fontFamily: 'inherit',
-                margin: 0,
-                padding: 0,
-                border: 'none',
-                background: 'transparent'
-              }}>
-                {displayContent}
-              </pre>
-            )
+            // Always use markdown renderer for real-time formatting
+            <MarkdownRenderer content={displayContent} />
           )}
         </div>
         

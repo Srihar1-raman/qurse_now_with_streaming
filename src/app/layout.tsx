@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import AuthProvider from "@/components/SessionProvider";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { Analytics } from "@vercel/analytics/react";
 
 const inter = Inter({
@@ -97,7 +98,9 @@ export default function RootLayout({
       >
         <AuthProvider>
           <ThemeProvider>
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
             <Analytics />
           </ThemeProvider>
         </AuthProvider>

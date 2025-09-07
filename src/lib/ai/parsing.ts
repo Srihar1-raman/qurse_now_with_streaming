@@ -82,30 +82,41 @@ export function parseReasoningResponse(content: string, modelName?: string, rawR
     console.log(`❌ No reasoning found in XAI response structure`);
   }
   
-  // PATTERN 2: GPT-OSS models - check for reasoning in rawResponse first
-  if (modelName && modelName.includes('GPT-OSS') && rawResponse) {
+
+  // PATTERN 2: GPT-OSS models with reasoning in rawResponse
+  if (modelName && (modelName.includes('gpt-oss') || modelName.includes('GPT-OSS'))) {
     console.log(`🔍 Checking GPT-OSS reasoning patterns for ${modelName}`);
-    
-    // Check Vercel AI SDK specific fields for GPT-OSS models
-    if (rawResponse.reasoning && rawResponse.reasoning.trim()) {
-      console.log(`✅ Found reasoning in rawResponse.reasoning for GPT-OSS`);
+    console.log(`🔍 GPT-OSS rawResponse:`, JSON.stringify(rawResponse, null, 2));
+
+    // Check for reasoning in rawResponse.reasoning or rawResponse.steps[0].reasoning
+    if (rawResponse?.reasoning) {
+      console.log(`✅ Found reasoning in rawResponse.reasoning:`, rawResponse.reasoning);
       return {
-        reasoning: rawResponse.reasoning.trim(),
+        reasoning: rawResponse.reasoning,
         finalAnswer: normalizedContent,
         hasReasoning: true
       };
     }
-    
-    // Check steps array for reasoning
-    if (rawResponse.steps && rawResponse.steps[0] && rawResponse.steps[0].reasoning && rawResponse.steps[0].reasoning.trim()) {
-      console.log(`✅ Found reasoning in rawResponse.steps[0].reasoning for GPT-OSS`);
+
+    if (rawResponse?.steps && rawResponse.steps[0] && rawResponse.steps[0].reasoning) {
+      console.log(`✅ Found reasoning in rawResponse.steps[0].reasoning:`, rawResponse.steps[0].reasoning);
       return {
-        reasoning: rawResponse.steps[0].reasoning.trim(),
+        reasoning: rawResponse.steps[0].reasoning,
         finalAnswer: normalizedContent,
         hasReasoning: true
       };
     }
-    
+
+    // Check for reasoning in other possible locations
+    if (rawResponse?.rawResult?.steps && rawResponse.rawResult.steps[0] && rawResponse.rawResult.steps[0].reasoning) {
+      console.log(`✅ Found reasoning in rawResponse.rawResult.steps[0].reasoning:`, rawResponse.rawResult.steps[0].reasoning);
+      return {
+        reasoning: rawResponse.rawResult.steps[0].reasoning,
+        finalAnswer: normalizedContent,
+        hasReasoning: true
+      };
+    }
+
     console.log(`❌ No reasoning found in GPT-OSS response structure`);
   }
 
@@ -114,7 +125,7 @@ export function parseReasoningResponse(content: string, modelName?: string, rawR
   if (thinkMatch && thinkMatch[1] && thinkMatch[1].trim()) {
     const reasoning = thinkMatch[1].trim();
     const finalAnswer = normalizedContent.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
-    
+
     return {
       reasoning,
       finalAnswer: finalAnswer || 'Response complete.',

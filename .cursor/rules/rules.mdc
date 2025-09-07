@@ -1,0 +1,104 @@
+---
+alwaysApply: true
+---
+# Cursor Rules for qurse (Next.js + TypeScript)
+
+
+# Intent
+- This project must be production-ready, secure, accessible, maintainable, and performant.
+- Follow clear architecture, strong typing, and strict linting.
+- Prefer readability and correctness over cleverness.
+
+# Languages & Frameworks
+- Runtime: Next.js (App Router), React 19, Bun, TypeScript strict.
+- Styling: Tailwind CSS v4, shadcn/ui components.
+- Data/Server: Supabase (later)
+
+# TypeScript & Code Quality
+- Enable and keep strict TS. Do not disable strict checks to “make it work”.
+- Exported functions, components, and modules must have explicit types.
+- Avoid any, unknown only with safe narrowing; never suppress with as any.
+- Name things descriptively. Functions are verbs; variables/classes are nouns.
+- Small, focused modules; no files longer than ~400 lines without good reason.
+- Prefer early returns and guard clauses; avoid deep nesting.
+- Handle errors explicitly with typed error shapes where possible.
+
+# React/Next.js
+- Use functional components; no legacy class components.
+- Client vs Server Components: default to Server, opt-in to Client with "use client" only when needed.
+- Keep Client Components lean; push data fetching and heavy work to Server/Edge.
+- Forms: prefer accessible form controls with labels; use shadcn/ui when appropriate.
+- Do not fetch in layout unless data is static. Prefer route handlers or Server Components.
+- Use Suspense/streaming where it improves UX. Avoid blocking loads.
+- No direct DOM manipulation; use refs and effects sparingly.
+
+# Styling & UI
+- Use Tailwind utility classes; avoid ad-hoc inline styles except for dynamic values.
+- Centralize design tokens in Tailwind; respect globals.css theme variables.
+- Reuse shadcn/ui primitives; avoid bespoke one-off components.
+- All interactive elements must have hover/focus/disabled states.
+
+# Accessibility (a11y)
+- All interactive elements must be keyboard accessible and focusable.
+- Provide aria-* labels/states where needed. Associate inputs with labels.
+- Respect reduced motion preferences; avoid motion-only cues.
+- Maintain color contrast; do not override tokens to reduce contrast.
+
+# Performance
+- Use Next.js image optimization for raster images; next/image where applicable.
+- Code-split via the app router by default; lazy-load heavy client components.
+- Avoid unnecessary Client Components; keep dependency arrays accurate in hooks.
+- Memoize expensive calcs (useMemo, useCallback) when they impact renders.
+
+# Data, API, and State
+- Co-locate server logic in src/app/api/* (Edge where streaming/latency matters) or Server Components.
+- Validate all external input with Zod in API routes and server actions.
+- Use typed DTOs for request/response; never return raw errors.
+- Prefer React server state over global client state; lift small local state where needed.
+- For client queries later, prefer lightweight fetch + SWR patterns or React Query (if added intentionally).
+
+# Security
+- Never log secrets. Do not commit secrets; use .env.local.
+- Validate and sanitize all inputs. Enforce content-length limits for uploads.
+- Set appropriate cache headers for APIs. Avoid exposing stack traces to clients.
+- Use the Edge runtime for AI streaming and ensure keys are server-side only.
+
+# Error Handling & UX
+- Fail fast on server with meaningful HTTP status codes and machine-readable payloads.
+- Show friendly error toasts/messages on client; avoid silent failures.
+- Add retry/backoff only where it improves UX.
+
+# Testing & Linting
+- Keep ESLint clean. Fix warnings; do not disable rules globally without justification.
+- Add unit tests for utilities and critical logic (when test infra is introduced).
+- Prefer integration tests for API routes/flows (later with Playwright or Vitest).
+
+# Project Structure
+- src/app for routes; keep pages thin, delegate to components in src/components/*.
+- src/components/ui for shadcn primitives; src/components/* for feature components.
+- src/lib/* for pure utilities and clients (e.g., xai, Supabase). No React here.
+- src/types/* for shared types and API schemas (when present).
+
+# Commit Hygiene
+- Conventional commits (feat, fix, chore, refactor, docs, test).
+- Atomic commits; include rationale if non-obvious.
+
+# PR & Reviews (if applicable)
+- Small PRs; clear descriptions; link to tasks/designs.
+- Self-review before requesting review. Ensure build and lint pass.
+
+# Env & Config
+- Example variables documented in README. No required env defaults in code.
+- Feature flags via env with safe fallbacks.
+
+# Dependencies
+- Be deliberate with new deps. Prefer stdlib/web APIs first.
+- Keep deps updated; avoid abandoned packages.
+
+# Documentation
+- Keep README up to date with setup and scripts.
+- Document non-trivial modules with brief docstrings explaining “why”.
+
+# Do/Don’t Quicklist
+- Do: strong typing, small components, server-first data, input validation, a11y
+- Don’t: leak secrets, use any, global mutable state, heavy logic in effects, client-only fetching by default
