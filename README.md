@@ -157,6 +157,4 @@ src/
 
 This project is licensed under the MIT License.
 
-## Support
 
-For support, please open an issue on GitHub or contact the maintainers.
